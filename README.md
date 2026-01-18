@@ -6,7 +6,7 @@ Brevo (Sendinblue) integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 1.0.0
+**Stable tag:** 1.0.1
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,9 @@ This add-on plugin exposes Brevo (formerly Sendinblue) functionality through MCP
 ```
 
 ## Changelog
+
+### 1.0.1
+- Improve API error handling and reuse permission callback
 
 ### 1.0.0
 - Initial release with 12 abilities

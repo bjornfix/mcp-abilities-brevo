@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, brevo, sendinblue, email, contacts
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -24,6 +24,9 @@ Part of the MCP Expose Abilities ecosystem.
 4. Activate the plugin
 
 == Changelog ==
+
+= 1.0.1 =
+* Improve API error handling and reuse permission callback
 
 = 1.0.0 =
 * Initial release with 12 abilities

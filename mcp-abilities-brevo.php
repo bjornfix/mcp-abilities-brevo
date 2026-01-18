@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Brevo
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-brevo
  * Description: Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, and send emails via Brevo API.
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -33,6 +33,13 @@ function mcp_brevo_check_dependencies(): bool {
 		return false;
 	}
 	return true;
+}
+
+/**
+ * Permission callback for Brevo abilities.
+ */
+function mcp_brevo_permission_callback(): bool {
+	return current_user_can( 'manage_options' );
 }
 
 /**
@@ -77,8 +84,12 @@ function mcp_brevo_api_request( string $method, string $endpoint, array $body = 
 	}
 
 	$status_code = wp_remote_retrieve_response_code( $response );
+	$status_text = wp_remote_retrieve_response_message( $response );
 	$body_raw    = wp_remote_retrieve_body( $response );
 	$body_data   = json_decode( $body_raw, true );
+	if ( null === $body_data && '' !== $body_raw ) {
+		$body_data = array( 'raw' => $body_raw );
+	}
 
 	// Success codes: 200, 201, 204.
 	if ( $status_code >= 200 && $status_code < 300 ) {
@@ -97,7 +108,7 @@ function mcp_brevo_api_request( string $method, string $endpoint, array $body = 
 
 	return array(
 		'success' => false,
-		'message' => 'API error (' . $status_code . '): ' . $error_message,
+		'message' => 'API error (' . $status_code . ' ' . $status_text . '): ' . $error_message,
 	);
 }
 
@@ -162,9 +173,7 @@ function mcp_register_brevo_abilities(): void {
 					'message'  => 'Retrieved ' . count( $result['data']['contacts'] ?? array() ) . ' contacts.',
 				);
 			},
-			'permission_callback' => function (): bool {
-				return current_user_can( 'manage_options' );
-			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => true,
@@ -221,9 +230,7 @@ function mcp_register_brevo_abilities(): void {
 					'message' => 'Contact retrieved successfully.',
 				);
 			},
-			'permission_callback' => function (): bool {
-				return current_user_can( 'manage_options' );
-			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => true,
@@ -310,9 +317,7 @@ function mcp_register_brevo_abilities(): void {
 					'message' => 'Contact created successfully.',
 				);
 			},
-			'permission_callback' => function (): bool {
-				return current_user_can( 'manage_options' );
-			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => false,
@@ -399,9 +404,7 @@ function mcp_register_brevo_abilities(): void {
 					'message' => 'Contact updated successfully.',
 				);
 			},
-			'permission_callback' => function (): bool {
-				return current_user_can( 'manage_options' );
-			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => false,
@@ -456,9 +459,7 @@ function mcp_register_brevo_abilities(): void {
 					'message' => 'Contact deleted successfully.',
 				);
 			},
-			'permission_callback' => function (): bool {
-				return current_user_can( 'manage_options' );
-			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => false,
@@ -520,9 +521,7 @@ function mcp_register_brevo_abilities(): void {
 					'message' => 'Retrieved ' . count( $result['data']['lists'] ?? array() ) . ' lists.',
 				);
 			},
-			'permission_callback' => function (): bool {
-				return current_user_can( 'manage_options' );
-			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => true,
@@ -530,6 +529,139 @@ function mcp_register_brevo_abilities(): void {
 					'idempotent'  => true,
 				),
 			),
+		)
+	);
+
+	wp_register_ability(
+		'brevo/get-list',
+		array(
+			'label'               => 'Get Contact List',
+			'description'         => 'Get a contact list by ID.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'list_id' ),
+				'properties'           => array(
+					'list_id' => array(
+						'type'        => 'integer',
+						'description' => 'List ID.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'list'    => array( 'type' => 'object' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$list_id = (int) ( $input['list_id'] ?? 0 );
+				if ( $list_id <= 0 ) {
+					return array( 'success' => false, 'message' => 'list_id is required.' );
+				}
+
+				$result = mcp_brevo_api_request( 'GET', 'contacts/lists/' . $list_id );
+				if ( ! empty( $result['success'] ) ) {
+					return $result;
+				}
+				return $result;
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+		)
+	);
+
+	wp_register_ability(
+		'brevo/update-list',
+		array(
+			'label'               => 'Update Contact List',
+			'description'         => 'Update a contact list name or folder.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'list_id' ),
+				'properties'           => array(
+					'list_id'  => array(
+						'type'        => 'integer',
+						'description' => 'List ID.',
+					),
+					'name'     => array(
+						'type'        => 'string',
+						'description' => 'List name.',
+					),
+					'folderId' => array(
+						'type'        => 'integer',
+						'description' => 'Folder ID.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$list_id = (int) ( $input['list_id'] ?? 0 );
+				if ( $list_id <= 0 ) {
+					return array( 'success' => false, 'message' => 'list_id is required.' );
+				}
+
+				$body = array();
+				if ( isset( $input['name'] ) ) {
+					$body['name'] = sanitize_text_field( $input['name'] );
+				}
+				if ( isset( $input['folderId'] ) ) {
+					$body['folderId'] = (int) $input['folderId'];
+				}
+
+				if ( empty( $body ) ) {
+					return array( 'success' => false, 'message' => 'No fields provided to update.' );
+				}
+
+				return mcp_brevo_api_request( 'PUT', 'contacts/lists/' . $list_id, $body );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+		)
+	);
+
+	wp_register_ability(
+		'brevo/delete-list',
+		array(
+			'label'               => 'Delete Contact List',
+			'description'         => 'Delete a contact list by ID.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'list_id' ),
+				'properties'           => array(
+					'list_id' => array(
+						'type'        => 'integer',
+						'description' => 'List ID.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$list_id = (int) ( $input['list_id'] ?? 0 );
+				if ( $list_id <= 0 ) {
+					return array( 'success' => false, 'message' => 'list_id is required.' );
+				}
+
+				return mcp_brevo_api_request( 'DELETE', 'contacts/lists/' . $list_id );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
 		)
 	);
 
@@ -587,9 +719,7 @@ function mcp_register_brevo_abilities(): void {
 					'message' => 'List created successfully.',
 				);
 			},
-			'permission_callback' => function (): bool {
-				return current_user_can( 'manage_options' );
-			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => false,
@@ -597,6 +727,283 @@ function mcp_register_brevo_abilities(): void {
 					'idempotent'  => false,
 				),
 			),
+		)
+	);
+
+	wp_register_ability(
+		'brevo/list-attributes',
+		array(
+			'label'               => 'List Contact Attributes',
+			'description'         => 'List all Brevo contact attributes.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'    => array( 'type' => 'boolean' ),
+					'attributes' => array( 'type' => 'array' ),
+					'message'    => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function (): array {
+				return mcp_brevo_api_request( 'GET', 'contacts/attributes' );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+		)
+	);
+
+	wp_register_ability(
+		'brevo/create-attribute',
+		array(
+			'label'               => 'Create Contact Attribute',
+			'description'         => 'Create a Brevo contact attribute.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'category', 'name', 'type' ),
+				'properties'           => array(
+					'category' => array(
+						'type'        => 'string',
+						'description' => 'Attribute category (e.g., normal, transactional).',
+					),
+					'name'     => array(
+						'type'        => 'string',
+						'description' => 'Attribute name.',
+					),
+					'type'     => array(
+						'type'        => 'string',
+						'description' => 'Attribute type (text, date, boolean, float, id, category).',
+					),
+					'enum'     => array(
+						'type'        => 'array',
+						'items'       => array( 'type' => 'string' ),
+						'description' => 'Optional enum values for category type.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$category = sanitize_text_field( $input['category'] ?? '' );
+				$name     = sanitize_text_field( $input['name'] ?? '' );
+				$type     = sanitize_text_field( $input['type'] ?? '' );
+
+				if ( empty( $category ) || empty( $name ) || empty( $type ) ) {
+					return array( 'success' => false, 'message' => 'category, name, and type are required.' );
+				}
+
+				$body = array( 'type' => $type );
+				if ( ! empty( $input['enum'] ) && is_array( $input['enum'] ) ) {
+					$body['enumeration'] = array_values( array_map( 'sanitize_text_field', $input['enum'] ) );
+				}
+
+				return mcp_brevo_api_request( 'POST', 'contacts/attributes/' . $category . '/' . $name, $body );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+		)
+	);
+
+	wp_register_ability(
+		'brevo/update-attribute',
+		array(
+			'label'               => 'Update Contact Attribute',
+			'description'         => 'Update a Brevo contact attribute.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'category', 'name', 'type' ),
+				'properties'           => array(
+					'category' => array(
+						'type'        => 'string',
+						'description' => 'Attribute category.',
+					),
+					'name'     => array(
+						'type'        => 'string',
+						'description' => 'Attribute name.',
+					),
+					'type'     => array(
+						'type'        => 'string',
+						'description' => 'Attribute type (text, date, boolean, float, id, category).',
+					),
+					'enum'     => array(
+						'type'        => 'array',
+						'items'       => array( 'type' => 'string' ),
+						'description' => 'Optional enum values for category type.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$category = sanitize_text_field( $input['category'] ?? '' );
+				$name     = sanitize_text_field( $input['name'] ?? '' );
+				$type     = sanitize_text_field( $input['type'] ?? '' );
+
+				if ( empty( $category ) || empty( $name ) || empty( $type ) ) {
+					return array( 'success' => false, 'message' => 'category, name, and type are required.' );
+				}
+
+				$body = array( 'type' => $type );
+				if ( ! empty( $input['enum'] ) && is_array( $input['enum'] ) ) {
+					$body['enumeration'] = array_values( array_map( 'sanitize_text_field', $input['enum'] ) );
+				}
+
+				return mcp_brevo_api_request( 'PUT', 'contacts/attributes/' . $category . '/' . $name, $body );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+		)
+	);
+
+	wp_register_ability(
+		'brevo/delete-attribute',
+		array(
+			'label'               => 'Delete Contact Attribute',
+			'description'         => 'Delete a Brevo contact attribute.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'category', 'name' ),
+				'properties'           => array(
+					'category' => array(
+						'type'        => 'string',
+						'description' => 'Attribute category.',
+					),
+					'name'     => array(
+						'type'        => 'string',
+						'description' => 'Attribute name.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$category = sanitize_text_field( $input['category'] ?? '' );
+				$name     = sanitize_text_field( $input['name'] ?? '' );
+
+				if ( empty( $category ) || empty( $name ) ) {
+					return array( 'success' => false, 'message' => 'category and name are required.' );
+				}
+
+				return mcp_brevo_api_request( 'DELETE', 'contacts/attributes/' . $category . '/' . $name );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+		)
+	);
+
+	wp_register_ability(
+		'brevo/list-senders',
+		array(
+			'label'               => 'List Senders',
+			'description'         => 'List Brevo email senders.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'senders' => array( 'type' => 'array' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function (): array {
+				return mcp_brevo_api_request( 'GET', 'senders' );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+		)
+	);
+
+	wp_register_ability(
+		'brevo/list-templates',
+		array(
+			'label'               => 'List SMTP Templates',
+			'description'         => 'List transactional email templates.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'limit'  => array( 'type' => 'integer', 'default' => 20 ),
+					'offset' => array( 'type' => 'integer', 'default' => 0 ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'   => array( 'type' => 'boolean' ),
+					'templates' => array( 'type' => 'array' ),
+					'message'   => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$limit  = max( 1, min( 100, (int) ( $input['limit'] ?? 20 ) ) );
+				$offset = max( 0, (int) ( $input['offset'] ?? 0 ) );
+
+				return mcp_brevo_api_request( 'GET', 'smtp/templates?limit=' . $limit . '&offset=' . $offset );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+		)
+	);
+
+	wp_register_ability(
+		'brevo/get-template',
+		array(
+			'label'               => 'Get SMTP Template',
+			'description'         => 'Get a transactional email template by ID.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'template_id' ),
+				'properties'           => array(
+					'template_id' => array(
+						'type'        => 'integer',
+						'description' => 'Template ID.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'  => array( 'type' => 'boolean' ),
+					'template' => array( 'type' => 'object' ),
+					'message'  => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$template_id = (int) ( $input['template_id'] ?? 0 );
+				if ( $template_id <= 0 ) {
+					return array( 'success' => false, 'message' => 'template_id is required.' );
+				}
+
+				return mcp_brevo_api_request( 'GET', 'smtp/templates/' . $template_id );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
 		)
 	);
 
@@ -661,9 +1068,7 @@ function mcp_register_brevo_abilities(): void {
 					'message' => 'Added ' . count( $emails ) . ' contact(s) to list.',
 				);
 			},
-			'permission_callback' => function (): bool {
-				return current_user_can( 'manage_options' );
-			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => false,
@@ -735,9 +1140,7 @@ function mcp_register_brevo_abilities(): void {
 					'message' => 'Removed ' . count( $emails ) . ' contact(s) from list.',
 				);
 			},
-			'permission_callback' => function (): bool {
-				return current_user_can( 'manage_options' );
-			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => false,
@@ -865,9 +1268,7 @@ function mcp_register_brevo_abilities(): void {
 					'message'   => 'Email sent successfully.',
 				);
 			},
-			'permission_callback' => function (): bool {
-				return current_user_can( 'manage_options' );
-			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => false,
@@ -947,9 +1348,7 @@ function mcp_register_brevo_abilities(): void {
 					'message'   => 'Retrieved ' . count( $result['data']['campaigns'] ?? array() ) . ' campaigns.',
 				);
 			},
-			'permission_callback' => function (): bool {
-				return current_user_can( 'manage_options' );
-			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => true,
@@ -1007,9 +1406,7 @@ function mcp_register_brevo_abilities(): void {
 					'message' => 'Campaign sent successfully.',
 				);
 			},
-			'permission_callback' => function (): bool {
-				return current_user_can( 'manage_options' );
-			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => false,
