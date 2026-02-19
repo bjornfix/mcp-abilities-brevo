@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Brevo
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-brevo
  * Description: Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, and send emails via Brevo API.
- * Version: 1.0.1
+ * Version: 1.0.2
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
