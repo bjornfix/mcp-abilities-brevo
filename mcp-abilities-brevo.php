@@ -42,6 +42,48 @@ function mcp_brevo_permission_callback(): bool {
 }
 
 /**
+ * Add default MCP annotations for Brevo abilities when omitted.
+ *
+ * @param array  $args         Ability registration args.
+ * @param string $ability_name Ability slug.
+ * @return array
+ */
+function mcp_brevo_add_default_annotations( array $args, string $ability_name ): array {
+	if ( ! str_starts_with( $ability_name, 'brevo/' ) || isset( $args['meta']['annotations'] ) ) {
+		return $args;
+	}
+
+	$readonly_abilities = array(
+		'brevo/list-contacts',
+		'brevo/get-contact',
+		'brevo/list-lists',
+		'brevo/get-list',
+		'brevo/list-attributes',
+		'brevo/get-campaign',
+		'brevo/list-campaigns',
+		'brevo/get-account',
+	);
+
+	$destructive_abilities = array(
+		'brevo/delete-contact',
+		'brevo/delete-list',
+		'brevo/delete-attribute',
+	);
+
+	$readonly = in_array( $ability_name, $readonly_abilities, true );
+	$destructive = in_array( $ability_name, $destructive_abilities, true );
+	$idempotent  = $readonly || str_contains( $ability_name, '/update-' );
+
+	$args['meta']['annotations'] = array(
+		'readonly'    => $readonly,
+		'destructive' => $destructive,
+		'idempotent'  => $idempotent,
+	);
+
+	return $args;
+}
+
+/**
  * Make a request to the Brevo API.
  *
  * @param string $method   HTTP method (GET, POST, PUT, DELETE).
@@ -73,13 +115,38 @@ function mcp_brevo_api_request( string $method, string $endpoint, array $body = 
 		$args['body'] = wp_json_encode( $body );
 	}
 
-	$response = wp_remote_request( 'https://api.brevo.com/v3/' . $endpoint, $args );
+	$response = null;
+	$attempts = 0;
+	$max_attempts = 3;
 
-	if ( is_wp_error( $response ) ) {
-		return array(
-			'success' => false,
-			'message' => 'API request failed: ' . $response->get_error_message(),
-		);
+	while ( $attempts < $max_attempts ) {
+		$attempts++;
+		$response = wp_remote_request( 'https://api.brevo.com/v3/' . $endpoint, $args );
+
+		if ( is_wp_error( $response ) ) {
+			if ( $attempts < $max_attempts ) {
+				usleep( 250000 * $attempts );
+				continue;
+			}
+
+			return array(
+				'success' => false,
+				'message' => 'API request failed: ' . $response->get_error_message(),
+			);
+		}
+
+		$status_code = wp_remote_retrieve_response_code( $response );
+		if ( ( 429 === $status_code || $status_code >= 500 ) && $attempts < $max_attempts ) {
+			$retry_after = (int) wp_remote_retrieve_header( $response, 'retry-after' );
+			if ( $retry_after > 0 && $retry_after <= 10 ) {
+				sleep( $retry_after );
+			} else {
+				usleep( 250000 * $attempts );
+			}
+			continue;
+		}
+
+		break;
 	}
 
 	$status_code = wp_remote_retrieve_response_code( $response );
@@ -503,11 +570,11 @@ function mcp_register_brevo_abilities(): void {
 					'message' => array( 'type' => 'string' ),
 				),
 			),
-			'execute_callback'    => function ( array $input = array() ): array {
-				$limit  = isset( $input['limit'] ) ? (int) $input['limit'] : 50;
-				$offset = isset( $input['offset'] ) ? (int) $input['offset'] : 0;
+				'execute_callback'    => function ( array $input = array() ): array {
+					$limit  = isset( $input['limit'] ) ? min( 1000, max( 1, (int) $input['limit'] ) ) : 50;
+					$offset = isset( $input['offset'] ) ? (int) $input['offset'] : 0;
 
-				$result = mcp_brevo_api_request( 'GET', 'contacts/lists?limit=' . $limit . '&offset=' . $offset );
+					$result = mcp_brevo_api_request( 'GET', 'contacts/lists?limit=' . $limit . '&offset=' . $offset );
 
 				if ( ! $result['success'] ) {
 					return $result;
@@ -1416,4 +1483,5 @@ function mcp_register_brevo_abilities(): void {
 		)
 	);
 }
+add_filter( 'wp_register_ability_args', 'mcp_brevo_add_default_annotations', 10, 2 );
 add_action( 'wp_abilities_api_init', 'mcp_register_brevo_abilities' );

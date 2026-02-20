@@ -6,7 +6,7 @@ Brevo (Sendinblue) integration for WordPress via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 1.0.1
+**Stable tag:** 1.0.2
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -32,30 +32,31 @@ This add-on plugin exposes Brevo (formerly Sendinblue) functionality through MCP
 4. Upload via WordPress Admin > Plugins > Add New > Upload Plugin
 5. Activate the plugin
 
-## Abilities (12)
+## Abilities (22)
 
-### Contacts
 | Ability | Description |
 |---------|-------------|
-| `brevo/list-contacts` | List all contacts with pagination |
+| `brevo/list-contacts` | List contacts with pagination |
 | `brevo/get-contact` | Get a single contact by email or ID |
-| `brevo/create-contact` | Create a new contact |
-| `brevo/update-contact` | Update contact attributes |
+| `brevo/create-contact` | Create a contact |
+| `brevo/update-contact` | Update a contact |
 | `brevo/delete-contact` | Delete a contact |
-
-### Lists
-| Ability | Description |
-|---------|-------------|
-| `brevo/list-lists` | Get all contact lists |
-| `brevo/create-list` | Create a new list |
+| `brevo/list-lists` | List contact lists |
+| `brevo/get-list` | Get a list by ID |
+| `brevo/update-list` | Update list metadata |
+| `brevo/delete-list` | Delete a list |
+| `brevo/create-list` | Create a list |
+| `brevo/list-attributes` | List contact attributes |
+| `brevo/create-attribute` | Create a custom attribute |
+| `brevo/update-attribute` | Update a custom attribute |
+| `brevo/delete-attribute` | Delete a custom attribute |
+| `brevo/list-senders` | List configured senders |
+| `brevo/list-templates` | List email templates |
+| `brevo/get-template` | Get template details |
 | `brevo/add-to-list` | Add contacts to a list |
 | `brevo/remove-from-list` | Remove contacts from a list |
-
-### Email
-| Ability | Description |
-|---------|-------------|
 | `brevo/send-email` | Send transactional email |
-| `brevo/list-campaigns` | List email campaigns |
+| `brevo/list-campaigns` | List campaigns |
 | `brevo/send-campaign` | Send a campaign immediately |
 
 ## Usage Examples
@@ -100,6 +101,11 @@ This add-on plugin exposes Brevo (formerly Sendinblue) functionality through MCP
 ```
 
 ## Changelog
+
+### 1.0.2
+- Added: list/get/update/delete abilities for Brevo lists and attributes
+- Added: sender and template read abilities
+- Added: campaign list/send abilities
 
 ### 1.0.1
 - Improve API error handling and reuse permission callback
