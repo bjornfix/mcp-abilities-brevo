@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, brevo, sendinblue, email, contacts
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 1.0.2
+Stable tag: 1.0.4
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -12,7 +12,9 @@ Brevo (Sendinblue) integration for WordPress via MCP.
 
 == Description ==
 
-This add-on plugin exposes Brevo (formerly Sendinblue) functionality through MCP (Model Context Protocol). Your AI assistant can manage contacts, lists, and send emails directly via the Brevo API.
+This add-on plugin exposes Brevo (formerly Sendinblue) functionality through MCP (Model Context Protocol). Your AI assistant can manage contacts, lists, folders, WordPress signup forms, senders, templates, webhooks, campaigns, and transactional email directly via Brevo.
+
+It also includes a guarded generic Brevo API request ability for the full Brevo v3 API surface, including product areas that do not yet need a dedicated wrapper.
 
 Part of the MCP Expose Abilities ecosystem.
 
@@ -24,6 +26,17 @@ Part of the MCP Expose Abilities ecosystem.
 4. Activate the plugin
 
 == Changelog ==
+
+= 1.0.4 =
+* Added: Generic Brevo v3 API request ability for endpoints not yet wrapped by a typed ability
+* Added: Account details ability
+* Added: Folder management abilities
+* Added: Official Brevo WordPress signup form CRUD and ensure abilities
+* Added: Webhook management abilities
+* Improved: PATCH and DELETE requests can send JSON bodies when the Brevo endpoint requires them
+
+= 1.0.3 =
+* Added: Sender, sender domain, template, campaign, list, and attribute operations
 
 = 1.0.2 =
 * Fixed: Removed hard plugin header dependency on abilities-api to avoid slug-mismatch activation blocking

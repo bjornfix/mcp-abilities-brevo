@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Brevo
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-brevo
  * Description: Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, and send emails via Brevo API.
- * Version: 1.0.2
+ * Version: 1.0.4
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -58,15 +58,25 @@ function mcp_brevo_add_default_annotations( array $args, string $ability_name ):
 		'brevo/get-contact',
 		'brevo/list-lists',
 		'brevo/get-list',
+		'brevo/list-wordpress-forms',
+		'brevo/get-wordpress-form',
 		'brevo/list-attributes',
+		'brevo/list-sender-domains',
+		'brevo/get-account',
+		'brevo/list-folders',
+		'brevo/get-folder',
+		'brevo/list-webhooks',
+		'brevo/get-webhook',
 		'brevo/get-campaign',
 		'brevo/list-campaigns',
-		'brevo/get-account',
 	);
 
 	$destructive_abilities = array(
 		'brevo/delete-contact',
 		'brevo/delete-list',
+		'brevo/delete-wordpress-form',
+		'brevo/delete-folder',
+		'brevo/delete-webhook',
 		'brevo/delete-attribute',
 	);
 
@@ -111,7 +121,7 @@ function mcp_brevo_api_request( string $method, string $endpoint, array $body = 
 		'timeout' => 30,
 	);
 
-	if ( ! empty( $body ) && in_array( $method, array( 'POST', 'PUT' ), true ) ) {
+	if ( ! empty( $body ) && in_array( $method, array( 'POST', 'PUT', 'PATCH', 'DELETE' ), true ) ) {
 		$args['body'] = wp_json_encode( $body );
 	}
 
@@ -179,12 +189,265 @@ function mcp_brevo_api_request( string $method, string $endpoint, array $body = 
 }
 
 /**
+ * Sanitize a Brevo API endpoint for generic API calls.
+ *
+ * @param string $endpoint Endpoint without base URL or full Brevo v3 URL.
+ * @return string|WP_Error
+ */
+function mcp_brevo_sanitize_endpoint( string $endpoint ) {
+	$endpoint = trim( $endpoint );
+	$endpoint = preg_replace( '#^https://api\.brevo\.com/v3/#', '', $endpoint );
+	$endpoint = ltrim( (string) $endpoint, '/' );
+
+	if ( '' === $endpoint ) {
+		return new WP_Error( 'brevo_empty_endpoint', 'Endpoint is required.' );
+	}
+
+	if ( preg_match( '#(^|/)\.\.(/|$)#', $endpoint ) || preg_match( '#^https?://#i', $endpoint ) ) {
+		return new WP_Error( 'brevo_invalid_endpoint', 'Endpoint must be a Brevo v3 relative endpoint.' );
+	}
+
+	return $endpoint;
+}
+
+/**
+ * Check whether the official Brevo WordPress form model is available.
+ *
+ * @return array|null Error response when unavailable, null when available.
+ */
+function mcp_brevo_require_wordpress_forms(): ?array {
+	if ( ! class_exists( 'SIB_Forms' ) ) {
+		return array(
+			'success' => false,
+			'message' => 'The official Brevo WordPress plugin form model is not available.',
+		);
+	}
+
+	return null;
+}
+
+/**
+ * Build a compact Brevo WordPress form body.
+ *
+ * @param string $button_label Submit button label.
+ * @param bool   $include_name Whether to include an optional first name field.
+ * @return string
+ */
+function mcp_brevo_build_wordpress_form_html( string $button_label, bool $include_name ): string {
+	$button_label = esc_attr( $button_label );
+	$html         = '<p class="sib-email-area"><label class="sib-email-area">Email address*</label><input type="email" class="sib-email-area" name="email" required="required" autocomplete="email"></p>';
+
+	if ( $include_name ) {
+		$html .= '<p class="sib-FIRSTNAME-area"><label class="sib-FIRSTNAME-area">Name</label><input type="text" class="sib-FIRSTNAME-area" name="FIRSTNAME" autocomplete="given-name"></p>';
+	}
+
+	$html .= '<p><input type="submit" class="sib-default-btn" value="' . $button_label . '"></p>';
+	return $html;
+}
+
+/**
+ * Build minimal CSS for a Brevo WordPress form.
+ *
+ * @return string
+ */
+function mcp_brevo_build_wordpress_form_css(): string {
+	return '[form]{display:grid;gap:14px;margin:0;}[form] p{margin:0;}[form] label{display:block;margin:0 0 6px;font-weight:600;}[form] input[type=text],[form] input[type=email]{width:100%;box-sizing:border-box;border:1px solid #c9c1bc;border-radius:6px;padding:13px 14px;min-height:48px;background:#fff;color:#111;}[form] .sib-default-btn{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:6px;padding:13px 18px;min-height:48px;background:#0b57d0;color:#fff;font-weight:700;cursor:pointer;}[form] .sib-default-btn:hover{background:#0847ad;}';
+}
+
+/**
+ * Sanitize Brevo form markup while preserving normal form fields.
+ *
+ * @param string $html Form HTML.
+ * @return string
+ */
+function mcp_brevo_sanitize_form_html( string $html ): string {
+	if ( class_exists( 'SIB_Manager' ) && method_exists( 'SIB_Manager', 'wordpress_allowed_attributes' ) ) {
+		return wp_kses( $html, SIB_Manager::wordpress_allowed_attributes() );
+	}
+
+	return wp_kses_post( $html );
+}
+
+/**
+ * Normalize a Brevo WordPress form array for MCP output.
+ *
+ * @param array $form Form row.
+ * @return array
+ */
+function mcp_brevo_normalize_wordpress_form( array $form ): array {
+	$id = (int) ( $form['id'] ?? 0 );
+
+	return array(
+		'id'             => $id,
+		'title'          => (string) ( $form['title'] ?? '' ),
+		'shortcode'      => $id > 0 ? '[sibwp_form id=' . $id . ']' : '',
+		'list_ids'       => array_values( array_map( 'intval', (array) ( $form['listID'] ?? array() ) ) ),
+		'list_names'     => (string) ( $form['listName'] ?? '' ),
+		'attributes'     => array_values( array_filter( array_map( 'trim', explode( ',', (string) ( $form['attributes'] ?? '' ) ) ) ) ),
+		'is_double_optin'=> ! empty( $form['isDopt'] ),
+		'is_optin'       => ! empty( $form['isOpt'] ),
+		'redirect_form'  => (string) ( $form['redirectInForm'] ?? '' ),
+		'redirect_email' => (string) ( $form['redirectInEmail'] ?? '' ),
+		'term_accept'    => ! empty( $form['termAccept'] ),
+		'terms_url'      => (string) ( $form['termsURL'] ?? '' ),
+		'date'           => (string) ( $form['date'] ?? '' ),
+		'is_default'     => ! empty( $form['isDefault'] ),
+	);
+}
+
+/**
+ * Build a form payload for the official Brevo WordPress plugin.
+ *
+ * @param array $input Input values.
+ * @param array $base  Existing row to merge when updating.
+ * @return array
+ */
+function mcp_brevo_build_wordpress_form_payload( array $input, array $base = array() ): array {
+	$list_ids = isset( $input['listIds'] ) ? array_map( 'strval', array_map( 'intval', (array) $input['listIds'] ) ) : (array) ( $base['listID'] ?? array() );
+	$list_ids = array_values( array_filter( $list_ids ) );
+
+	$include_name = isset( $input['includeName'] ) ? (bool) $input['includeName'] : in_array( 'FIRSTNAME', explode( ',', (string) ( $base['attributes'] ?? '' ) ), true );
+	$button_label = sanitize_text_field( (string) ( $input['buttonLabel'] ?? 'Join the waitlist' ) );
+	$html         = isset( $input['html'] ) ? mcp_brevo_sanitize_form_html( (string) $input['html'] ) : mcp_brevo_build_wordpress_form_html( $button_label, $include_name );
+	$css          = isset( $input['css'] ) ? wp_strip_all_tags( (string) $input['css'] ) : ( (string) ( $base['css'] ?? '' ) ?: mcp_brevo_build_wordpress_form_css() );
+	$attributes   = isset( $input['attributes'] ) ? array_map( 'sanitize_text_field', (array) $input['attributes'] ) : array( 'email' );
+
+	if ( $include_name && ! in_array( 'FIRSTNAME', $attributes, true ) ) {
+		$attributes[] = 'FIRSTNAME';
+	}
+
+	return array(
+		'title'             => sanitize_text_field( (string) ( $input['title'] ?? ( $base['title'] ?? 'Brevo signup form' ) ) ),
+		'html'              => $html,
+		'css'               => $css,
+		'dependTheme'       => isset( $input['dependTheme'] ) ? (int) (bool) $input['dependTheme'] : (int) ( $base['dependTheme'] ?? 0 ),
+		'listID'            => maybe_serialize( $list_ids ),
+		'templateID'        => (int) ( $input['templateID'] ?? ( $base['templateID'] ?? -1 ) ),
+		'confirmID'         => (int) ( $input['confirmID'] ?? ( $base['confirmID'] ?? -1 ) ),
+		'isOpt'             => isset( $input['isOptin'] ) ? (int) (bool) $input['isOptin'] : (int) ( $base['isOpt'] ?? 0 ),
+		'isDopt'            => isset( $input['isDoubleOptin'] ) ? (int) (bool) $input['isDoubleOptin'] : (int) ( $base['isDopt'] ?? 0 ),
+		'redirectInEmail'   => esc_url_raw( (string) ( $input['redirectInEmail'] ?? ( $base['redirectInEmail'] ?? '' ) ) ),
+		'redirectInForm'    => esc_url_raw( (string) ( $input['redirectInForm'] ?? ( $base['redirectInForm'] ?? '' ) ) ),
+		'successMsg'        => sanitize_text_field( (string) ( $input['successMsg'] ?? ( $base['successMsg'] ?? 'Thanks. You are on the list.' ) ) ),
+		'errorMsg'          => sanitize_text_field( (string) ( $input['errorMsg'] ?? ( $base['errorMsg'] ?? 'Something went wrong. Please try again.' ) ) ),
+		'existMsg'          => sanitize_text_field( (string) ( $input['existMsg'] ?? ( $base['existMsg'] ?? 'You are already on the list.' ) ) ),
+		'invalidMsg'        => sanitize_text_field( (string) ( $input['invalidMsg'] ?? ( $base['invalidMsg'] ?? 'Please enter a valid email address.' ) ) ),
+		'requiredMsg'       => sanitize_text_field( (string) ( $input['requiredMsg'] ?? ( $base['requiredMsg'] ?? 'Please fill out this field.' ) ) ),
+		'attributes'        => implode( ',', array_values( array_unique( array_filter( $attributes ) ) ) ),
+		'gcaptcha'          => (int) ( $input['gCaptcha'] ?? ( $base['gCaptcha'] ?? 0 ) ),
+		'gcaptcha_secret'   => sanitize_text_field( (string) ( $input['gCaptchaSecret'] ?? ( $base['gCaptcha_secret'] ?? '' ) ) ),
+		'gcaptcha_site'     => sanitize_text_field( (string) ( $input['gCaptchaSite'] ?? ( $base['gCaptcha_site'] ?? '' ) ) ),
+		'termAccept'        => isset( $input['termAccept'] ) ? (int) (bool) $input['termAccept'] : (int) ( $base['termAccept'] ?? 0 ),
+		'termsURL'          => esc_url_raw( (string) ( $input['termsUrl'] ?? ( $base['termsURL'] ?? '' ) ) ),
+		'selectCaptchaType' => (int) ( $input['selectCaptchaType'] ?? ( $base['selectCaptchaType'] ?? 0 ) ),
+		'cCaptchaType'      => (int) ( $input['cCaptchaType'] ?? ( $base['cCaptchaType'] ?? 0 ) ),
+		'ccaptcha_secret'   => sanitize_text_field( (string) ( $input['cCaptchaSecret'] ?? ( $base['cCaptcha_secret'] ?? '' ) ) ),
+		'ccaptcha_site'     => sanitize_text_field( (string) ( $input['cCaptchaSite'] ?? ( $base['cCaptcha_site'] ?? '' ) ) ),
+		'cCaptchaStyle'     => sanitize_text_field( (string) ( $input['cCaptchaStyle'] ?? ( $base['cCaptchaStyle'] ?? '' ) ) ),
+	);
+}
+
+/**
  * Register Brevo abilities.
  */
 function mcp_register_brevo_abilities(): void {
 	if ( ! mcp_brevo_check_dependencies() ) {
 		return;
 	}
+
+	// =========================================================================
+	// CORE - Generic Brevo API request for endpoints not yet wrapped below.
+	// =========================================================================
+	wp_register_ability(
+		'brevo/api-request',
+		array(
+			'label'               => 'Brevo API Request',
+			'description'         => 'Call any Brevo API v3 endpoint with the configured Brevo API key. Use specific abilities when available.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'method', 'endpoint' ),
+				'properties'           => array(
+					'method'   => array(
+						'type'        => 'string',
+						'enum'        => array( 'GET', 'POST', 'PUT', 'PATCH', 'DELETE' ),
+						'description' => 'HTTP method.',
+					),
+					'endpoint' => array(
+						'type'        => 'string',
+						'description' => 'Brevo API v3 endpoint, for example contacts/folders or smtp/statistics/events.',
+					),
+					'body'     => array(
+						'type'        => 'object',
+						'description' => 'JSON body for POST, PUT, PATCH, or DELETE requests.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'data'    => array( 'type' => array( 'object', 'array', 'string', 'null' ) ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$method = strtoupper( sanitize_text_field( (string) ( $input['method'] ?? '' ) ) );
+				if ( ! in_array( $method, array( 'GET', 'POST', 'PUT', 'PATCH', 'DELETE' ), true ) ) {
+					return array( 'success' => false, 'message' => 'Unsupported method.' );
+				}
+
+				$endpoint = mcp_brevo_sanitize_endpoint( (string) ( $input['endpoint'] ?? '' ) );
+				if ( is_wp_error( $endpoint ) ) {
+					return array( 'success' => false, 'message' => $endpoint->get_error_message() );
+				}
+
+				return mcp_brevo_api_request( $method, $endpoint, (array) ( $input['body'] ?? array() ) );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	wp_register_ability(
+		'brevo/get-account',
+		array(
+			'label'               => 'Get Brevo Account',
+			'description'         => 'Get the current Brevo account details and plan information.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'data'    => array( 'type' => 'object' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function (): array {
+				return mcp_brevo_api_request( 'GET', 'account' );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
 
 	// =========================================================================
 	// CONTACTS - List Contacts
@@ -796,6 +1059,571 @@ function mcp_register_brevo_abilities(): void {
 		)
 	);
 
+	// =========================================================================
+	// FOLDERS - Manage contact-list folders.
+	// =========================================================================
+	wp_register_ability(
+		'brevo/list-folders',
+		array(
+			'label'               => 'List Brevo Folders',
+			'description'         => 'List Brevo contact-list folders.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'limit'  => array( 'type' => 'integer', 'default' => 50 ),
+					'offset' => array( 'type' => 'integer', 'default' => 0 ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'folders' => array( 'type' => 'array' ),
+					'count'   => array( 'type' => 'integer' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$limit  = isset( $input['limit'] ) ? min( 50, max( 1, (int) $input['limit'] ) ) : 50;
+				$offset = isset( $input['offset'] ) ? max( 0, (int) $input['offset'] ) : 0;
+				$result = mcp_brevo_api_request( 'GET', 'contacts/folders?limit=' . $limit . '&offset=' . $offset );
+				if ( ! $result['success'] ) {
+					return $result;
+				}
+				return array(
+					'success' => true,
+					'folders' => $result['data']['folders'] ?? array(),
+					'count'   => $result['data']['count'] ?? 0,
+					'message' => 'Retrieved ' . count( $result['data']['folders'] ?? array() ) . ' folder(s).',
+				);
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	wp_register_ability(
+		'brevo/get-folder',
+		array(
+			'label'               => 'Get Brevo Folder',
+			'description'         => 'Get a Brevo contact-list folder by ID.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'folderId' ),
+				'properties'           => array(
+					'folderId' => array( 'type' => 'integer' ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'data'    => array( 'type' => 'object' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$folder_id = (int) ( $input['folderId'] ?? 0 );
+				if ( $folder_id <= 0 ) {
+					return array( 'success' => false, 'message' => 'folderId is required.' );
+				}
+				return mcp_brevo_api_request( 'GET', 'contacts/folders/' . $folder_id );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+		)
+	);
+
+	wp_register_ability(
+		'brevo/create-folder',
+		array(
+			'label'               => 'Create Brevo Folder',
+			'description'         => 'Create a Brevo contact-list folder.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'name' ),
+				'properties'           => array(
+					'name' => array( 'type' => 'string' ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'data'    => array( 'type' => 'object' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				if ( empty( $input['name'] ) ) {
+					return array( 'success' => false, 'message' => 'name is required.' );
+				}
+				return mcp_brevo_api_request( 'POST', 'contacts/folders', array( 'name' => sanitize_text_field( (string) $input['name'] ) ) );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+		)
+	);
+
+	wp_register_ability(
+		'brevo/update-folder',
+		array(
+			'label'               => 'Update Brevo Folder',
+			'description'         => 'Update a Brevo contact-list folder.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'folderId', 'name' ),
+				'properties'           => array(
+					'folderId' => array( 'type' => 'integer' ),
+					'name'     => array( 'type' => 'string' ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$folder_id = (int) ( $input['folderId'] ?? 0 );
+				if ( $folder_id <= 0 || empty( $input['name'] ) ) {
+					return array( 'success' => false, 'message' => 'folderId and name are required.' );
+				}
+				return mcp_brevo_api_request( 'PUT', 'contacts/folders/' . $folder_id, array( 'name' => sanitize_text_field( (string) $input['name'] ) ) );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+		)
+	);
+
+	wp_register_ability(
+		'brevo/delete-folder',
+		array(
+			'label'               => 'Delete Brevo Folder',
+			'description'         => 'Delete a Brevo contact-list folder.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'folderId' ),
+				'properties'           => array(
+					'folderId' => array( 'type' => 'integer' ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$folder_id = (int) ( $input['folderId'] ?? 0 );
+				if ( $folder_id <= 0 ) {
+					return array( 'success' => false, 'message' => 'folderId is required.' );
+				}
+				return mcp_brevo_api_request( 'DELETE', 'contacts/folders/' . $folder_id );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => true,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// WORDPRESS FORMS - Full CRUD for official Brevo plugin forms.
+	// =========================================================================
+	wp_register_ability(
+		'brevo/list-wordpress-forms',
+		array(
+			'label'               => 'List Brevo WordPress Forms',
+			'description'         => 'List sign-up forms stored by the official Brevo WordPress plugin, including shortcodes.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'forms'   => array( 'type' => 'array' ),
+					'count'   => array( 'type' => 'integer' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function (): array {
+				$error = mcp_brevo_require_wordpress_forms();
+				if ( null !== $error ) {
+					return $error;
+				}
+
+				$forms = array_map( 'mcp_brevo_normalize_wordpress_form', SIB_Forms::getForms() );
+				return array(
+					'success' => true,
+					'forms'   => $forms,
+					'count'   => count( $forms ),
+					'message' => 'Retrieved ' . count( $forms ) . ' Brevo WordPress form(s).',
+				);
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	wp_register_ability(
+		'brevo/get-wordpress-form',
+		array(
+			'label'               => 'Get Brevo WordPress Form',
+			'description'         => 'Get a Brevo WordPress sign-up form by ID, including shortcode and raw HTML/CSS.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id' ),
+				'properties'           => array(
+					'id' => array(
+						'type'        => 'integer',
+						'description' => 'Brevo WordPress form ID.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'form'    => array( 'type' => 'object' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$error = mcp_brevo_require_wordpress_forms();
+				if ( null !== $error ) {
+					return $error;
+				}
+
+				$id = (int) ( $input['id'] ?? 0 );
+				if ( $id <= 0 ) {
+					return array( 'success' => false, 'message' => 'id is required.' );
+				}
+
+				$form = SIB_Forms::getForm( $id );
+				if ( empty( $form ) ) {
+					return array( 'success' => false, 'message' => 'Brevo WordPress form not found.' );
+				}
+
+				$output = mcp_brevo_normalize_wordpress_form( array_merge( $form, array( 'id' => $id ) ) );
+				$output['html'] = (string) ( $form['html'] ?? '' );
+				$output['css']  = (string) ( $form['css'] ?? '' );
+
+				return array(
+					'success' => true,
+					'form'    => $output,
+					'message' => 'Brevo WordPress form retrieved.',
+				);
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	wp_register_ability(
+		'brevo/create-wordpress-form',
+		array(
+			'label'               => 'Create Brevo WordPress Form',
+			'description'         => 'Create a sign-up form in the official Brevo WordPress plugin and return the shortcode.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'title', 'listIds' ),
+				'properties'           => array(
+					'title'           => array( 'type' => 'string' ),
+					'listIds'         => array( 'type' => 'array', 'items' => array( 'type' => 'integer' ) ),
+					'buttonLabel'     => array( 'type' => 'string' ),
+					'includeName'     => array( 'type' => 'boolean' ),
+					'html'            => array( 'type' => 'string' ),
+					'css'             => array( 'type' => 'string' ),
+					'attributes'      => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+					'isOptin'         => array( 'type' => 'boolean' ),
+					'isDoubleOptin'   => array( 'type' => 'boolean' ),
+					'redirectInForm'  => array( 'type' => 'string' ),
+					'redirectInEmail' => array( 'type' => 'string' ),
+					'successMsg'      => array( 'type' => 'string' ),
+					'errorMsg'        => array( 'type' => 'string' ),
+					'existMsg'        => array( 'type' => 'string' ),
+					'invalidMsg'      => array( 'type' => 'string' ),
+					'requiredMsg'     => array( 'type' => 'string' ),
+					'termAccept'      => array( 'type' => 'boolean' ),
+					'termsUrl'        => array( 'type' => 'string' ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'   => array( 'type' => 'boolean' ),
+					'id'        => array( 'type' => 'integer' ),
+					'shortcode' => array( 'type' => 'string' ),
+					'message'   => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$error = mcp_brevo_require_wordpress_forms();
+				if ( null !== $error ) {
+					return $error;
+				}
+
+				if ( empty( $input['title'] ) || empty( $input['listIds'] ) ) {
+					return array( 'success' => false, 'message' => 'title and listIds are required.' );
+				}
+
+				$id = (int) SIB_Forms::addForm( mcp_brevo_build_wordpress_form_payload( $input ) );
+				return array(
+					'success'   => $id > 0,
+					'id'        => $id,
+					'shortcode' => '[sibwp_form id=' . $id . ']',
+					'message'   => $id > 0 ? 'Brevo WordPress form created.' : 'Brevo WordPress form could not be created.',
+				);
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	wp_register_ability(
+		'brevo/update-wordpress-form',
+		array(
+			'label'               => 'Update Brevo WordPress Form',
+			'description'         => 'Update a sign-up form stored by the official Brevo WordPress plugin.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id' ),
+				'properties'           => array(
+					'id'              => array( 'type' => 'integer' ),
+					'title'           => array( 'type' => 'string' ),
+					'listIds'         => array( 'type' => 'array', 'items' => array( 'type' => 'integer' ) ),
+					'buttonLabel'     => array( 'type' => 'string' ),
+					'includeName'     => array( 'type' => 'boolean' ),
+					'html'            => array( 'type' => 'string' ),
+					'css'             => array( 'type' => 'string' ),
+					'attributes'      => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+					'isOptin'         => array( 'type' => 'boolean' ),
+					'isDoubleOptin'   => array( 'type' => 'boolean' ),
+					'redirectInForm'  => array( 'type' => 'string' ),
+					'redirectInEmail' => array( 'type' => 'string' ),
+					'successMsg'      => array( 'type' => 'string' ),
+					'errorMsg'        => array( 'type' => 'string' ),
+					'existMsg'        => array( 'type' => 'string' ),
+					'invalidMsg'      => array( 'type' => 'string' ),
+					'requiredMsg'     => array( 'type' => 'string' ),
+					'termAccept'      => array( 'type' => 'boolean' ),
+					'termsUrl'        => array( 'type' => 'string' ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'   => array( 'type' => 'boolean' ),
+					'id'        => array( 'type' => 'integer' ),
+					'shortcode' => array( 'type' => 'string' ),
+					'message'   => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$error = mcp_brevo_require_wordpress_forms();
+				if ( null !== $error ) {
+					return $error;
+				}
+
+				$id = (int) ( $input['id'] ?? 0 );
+				if ( $id <= 0 ) {
+					return array( 'success' => false, 'message' => 'id is required.' );
+				}
+
+				$existing = SIB_Forms::getForm( $id );
+				if ( empty( $existing ) ) {
+					return array( 'success' => false, 'message' => 'Brevo WordPress form not found.' );
+				}
+
+				SIB_Forms::updateForm( $id, mcp_brevo_build_wordpress_form_payload( $input, $existing ) );
+				return array(
+					'success'   => true,
+					'id'        => $id,
+					'shortcode' => '[sibwp_form id=' . $id . ']',
+					'message'   => 'Brevo WordPress form updated.',
+				);
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+		)
+	);
+
+	wp_register_ability(
+		'brevo/delete-wordpress-form',
+		array(
+			'label'               => 'Delete Brevo WordPress Form',
+			'description'         => 'Delete a sign-up form stored by the official Brevo WordPress plugin.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id' ),
+				'properties'           => array(
+					'id' => array( 'type' => 'integer' ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$error = mcp_brevo_require_wordpress_forms();
+				if ( null !== $error ) {
+					return $error;
+				}
+
+				$id = (int) ( $input['id'] ?? 0 );
+				if ( $id <= 0 ) {
+					return array( 'success' => false, 'message' => 'id is required.' );
+				}
+
+				SIB_Forms::deleteForm( $id );
+				return array(
+					'success' => true,
+					'message' => 'Brevo WordPress form deleted.',
+				);
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => true,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	wp_register_ability(
+		'brevo/ensure-wordpress-form',
+		array(
+			'label'               => 'Ensure Brevo WordPress Form',
+			'description'         => 'Create or update a Brevo WordPress sign-up form by title and return its shortcode.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'title', 'listIds' ),
+				'properties'           => array(
+					'title'           => array( 'type' => 'string' ),
+					'listIds'         => array( 'type' => 'array', 'items' => array( 'type' => 'integer' ) ),
+					'buttonLabel'     => array( 'type' => 'string' ),
+					'includeName'     => array( 'type' => 'boolean' ),
+					'html'            => array( 'type' => 'string' ),
+					'css'             => array( 'type' => 'string' ),
+					'attributes'      => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+					'isOptin'         => array( 'type' => 'boolean' ),
+					'isDoubleOptin'   => array( 'type' => 'boolean' ),
+					'redirectInForm'  => array( 'type' => 'string' ),
+					'redirectInEmail' => array( 'type' => 'string' ),
+					'successMsg'      => array( 'type' => 'string' ),
+					'errorMsg'        => array( 'type' => 'string' ),
+					'existMsg'        => array( 'type' => 'string' ),
+					'invalidMsg'      => array( 'type' => 'string' ),
+					'requiredMsg'     => array( 'type' => 'string' ),
+					'termAccept'      => array( 'type' => 'boolean' ),
+					'termsUrl'        => array( 'type' => 'string' ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'   => array( 'type' => 'boolean' ),
+					'id'        => array( 'type' => 'integer' ),
+					'shortcode' => array( 'type' => 'string' ),
+					'created'   => array( 'type' => 'boolean' ),
+					'message'   => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$error = mcp_brevo_require_wordpress_forms();
+				if ( null !== $error ) {
+					return $error;
+				}
+
+				$title = sanitize_text_field( (string) ( $input['title'] ?? '' ) );
+				if ( '' === $title || empty( $input['listIds'] ) ) {
+					return array( 'success' => false, 'message' => 'title and listIds are required.' );
+				}
+
+				foreach ( SIB_Forms::getForms() as $form ) {
+					if ( isset( $form['title'], $form['id'] ) && $title === (string) $form['title'] ) {
+						$id       = (int) $form['id'];
+						$existing = SIB_Forms::getForm( $id );
+						SIB_Forms::updateForm( $id, mcp_brevo_build_wordpress_form_payload( $input, $existing ) );
+						return array(
+							'success'   => true,
+							'id'        => $id,
+							'shortcode' => '[sibwp_form id=' . $id . ']',
+							'created'   => false,
+							'message'   => 'Brevo WordPress form updated.',
+						);
+					}
+				}
+
+				$id = (int) SIB_Forms::addForm( mcp_brevo_build_wordpress_form_payload( $input ) );
+				return array(
+					'success'   => $id > 0,
+					'id'        => $id,
+					'shortcode' => '[sibwp_form id=' . $id . ']',
+					'created'   => true,
+					'message'   => $id > 0 ? 'Brevo WordPress form created.' : 'Brevo WordPress form could not be created.',
+				);
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+		)
+	);
+
 	wp_register_ability(
 		'brevo/list-attributes',
 		array(
@@ -978,6 +1806,231 @@ function mcp_register_brevo_abilities(): void {
 		)
 	);
 
+	// =========================================================================
+	// WEBHOOKS - Marketing and transactional webhooks.
+	// =========================================================================
+	wp_register_ability(
+		'brevo/list-webhooks',
+		array(
+			'label'               => 'List Brevo Webhooks',
+			'description'         => 'List Brevo webhooks. Use type to filter transactional or marketing webhooks when needed.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'type' => array(
+						'type'        => 'string',
+						'description' => 'Optional webhook type, for example transactional or marketing.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'  => array( 'type' => 'boolean' ),
+					'webhooks' => array( 'type' => 'array' ),
+					'message'  => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$endpoint = 'webhooks';
+				if ( ! empty( $input['type'] ) ) {
+					$endpoint .= '?type=' . rawurlencode( sanitize_text_field( (string) $input['type'] ) );
+				}
+				$result = mcp_brevo_api_request( 'GET', $endpoint );
+				if ( ! $result['success'] ) {
+					return $result;
+				}
+				return array(
+					'success'  => true,
+					'webhooks' => $result['data']['webhooks'] ?? $result['data'] ?? array(),
+					'message'  => 'Brevo webhooks retrieved.',
+				);
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	wp_register_ability(
+		'brevo/get-webhook',
+		array(
+			'label'               => 'Get Brevo Webhook',
+			'description'         => 'Get a Brevo webhook by ID.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id' ),
+				'properties'           => array(
+					'id' => array( 'type' => 'integer' ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'data'    => array( 'type' => 'object' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$id = (int) ( $input['id'] ?? 0 );
+				if ( $id <= 0 ) {
+					return array( 'success' => false, 'message' => 'id is required.' );
+				}
+				return mcp_brevo_api_request( 'GET', 'webhooks/' . $id );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+		)
+	);
+
+	wp_register_ability(
+		'brevo/create-webhook',
+		array(
+			'label'               => 'Create Brevo Webhook',
+			'description'         => 'Create a Brevo webhook. Body is passed through to the Brevo API after basic URL validation.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'url', 'events' ),
+				'properties'           => array(
+					'url'         => array( 'type' => 'string' ),
+					'events'      => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+					'description' => array( 'type' => 'string' ),
+					'type'        => array( 'type' => 'string' ),
+					'body'        => array( 'type' => 'object' ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'data'    => array( 'type' => 'object' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$url = esc_url_raw( (string) ( $input['url'] ?? '' ) );
+				if ( '' === $url || empty( $input['events'] ) ) {
+					return array( 'success' => false, 'message' => 'url and events are required.' );
+				}
+				$body = (array) ( $input['body'] ?? array() );
+				$body['url'] = $url;
+				$body['events'] = array_values( array_map( 'sanitize_text_field', (array) $input['events'] ) );
+				if ( isset( $input['description'] ) ) {
+					$body['description'] = sanitize_text_field( (string) $input['description'] );
+				}
+				if ( isset( $input['type'] ) ) {
+					$body['type'] = sanitize_text_field( (string) $input['type'] );
+				}
+				return mcp_brevo_api_request( 'POST', 'webhooks', $body );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+		)
+	);
+
+	wp_register_ability(
+		'brevo/update-webhook',
+		array(
+			'label'               => 'Update Brevo Webhook',
+			'description'         => 'Update a Brevo webhook. Body is passed through to the Brevo API after basic validation.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id' ),
+				'properties'           => array(
+					'id'          => array( 'type' => 'integer' ),
+					'url'         => array( 'type' => 'string' ),
+					'events'      => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+					'description' => array( 'type' => 'string' ),
+					'type'        => array( 'type' => 'string' ),
+					'body'        => array( 'type' => 'object' ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'data'    => array( 'type' => 'object' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$id = (int) ( $input['id'] ?? 0 );
+				if ( $id <= 0 ) {
+					return array( 'success' => false, 'message' => 'id is required.' );
+				}
+				$body = (array) ( $input['body'] ?? array() );
+				if ( isset( $input['url'] ) ) {
+					$body['url'] = esc_url_raw( (string) $input['url'] );
+				}
+				if ( isset( $input['events'] ) ) {
+					$body['events'] = array_values( array_map( 'sanitize_text_field', (array) $input['events'] ) );
+				}
+				if ( isset( $input['description'] ) ) {
+					$body['description'] = sanitize_text_field( (string) $input['description'] );
+				}
+				if ( isset( $input['type'] ) ) {
+					$body['type'] = sanitize_text_field( (string) $input['type'] );
+				}
+				if ( empty( $body ) ) {
+					return array( 'success' => false, 'message' => 'No webhook fields provided.' );
+				}
+				return mcp_brevo_api_request( 'PUT', 'webhooks/' . $id, $body );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+		)
+	);
+
+	wp_register_ability(
+		'brevo/delete-webhook',
+		array(
+			'label'               => 'Delete Brevo Webhook',
+			'description'         => 'Delete a Brevo webhook by ID.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'id' ),
+				'properties'           => array(
+					'id' => array( 'type' => 'integer' ),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$id = (int) ( $input['id'] ?? 0 );
+				if ( $id <= 0 ) {
+					return array( 'success' => false, 'message' => 'id is required.' );
+				}
+				return mcp_brevo_api_request( 'DELETE', 'webhooks/' . $id );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => true,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
 	wp_register_ability(
 		'brevo/list-senders',
 		array(
@@ -999,6 +2052,86 @@ function mcp_register_brevo_abilities(): void {
 			),
 			'execute_callback'    => function (): array {
 				return mcp_brevo_api_request( 'GET', 'senders' );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+		)
+	);
+
+	wp_register_ability(
+		'brevo/list-sender-domains',
+		array(
+			'label'               => 'List Sender Domains',
+			'description'         => 'List Brevo sender domains and their authentication status.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'data'    => array( 'type' => 'object' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function (): array {
+				return mcp_brevo_api_request( 'GET', 'senders/domains' );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+		)
+	);
+
+	wp_register_ability(
+		'brevo/create-sender',
+		array(
+			'label'               => 'Create Sender',
+			'description'         => 'Create a Brevo email sender identity.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'name'  => array(
+						'type'        => 'string',
+						'description' => 'Sender display name.',
+					),
+					'email' => array(
+						'type'        => 'string',
+						'format'      => 'email',
+						'description' => 'Sender email address.',
+					),
+				),
+				'required'             => array( 'name', 'email' ),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'data'    => array( 'type' => 'object' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$name  = sanitize_text_field( (string) ( $input['name'] ?? '' ) );
+				$email = sanitize_email( (string) ( $input['email'] ?? '' ) );
+
+				if ( '' === $name || ! is_email( $email ) ) {
+					return array(
+						'success' => false,
+						'message' => 'A valid sender name and email are required.',
+					);
+				}
+
+				return mcp_brevo_api_request(
+					'POST',
+					'senders',
+					array(
+						'name'  => $name,
+						'email' => $email,
+					)
+				);
 			},
 			'permission_callback' => 'mcp_brevo_permission_callback',
 		)
