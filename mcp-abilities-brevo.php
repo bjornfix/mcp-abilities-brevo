@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Brevo
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-brevo
  * Description: Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, WonderPush localization, and send emails via Brevo API.
- * Version: 1.0.6
+ * Version: 1.0.7
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -277,15 +277,27 @@ function mcp_brevo_ensure_language_attribute( string $attribute_name, bool $dry_
  * @return array
  */
 function mcp_brevo_get_all_lists(): array {
-	$result = mcp_brevo_api_request( 'GET', 'contacts/lists?limit=1000&offset=0' );
-	if ( empty( $result['success'] ) ) {
-		return $result;
-	}
+	$lists  = array();
+	$count  = 0;
+	$limit  = 50;
+	$offset = 0;
+
+	do {
+		$result = mcp_brevo_api_request( 'GET', 'contacts/lists?limit=' . $limit . '&offset=' . $offset );
+		if ( empty( $result['success'] ) ) {
+			return $result;
+		}
+
+		$page_lists = (array) ( $result['data']['lists'] ?? array() );
+		$count      = (int) ( $result['data']['count'] ?? count( $page_lists ) );
+		$lists      = array_merge( $lists, $page_lists );
+		$offset    += $limit;
+	} while ( count( $page_lists ) === $limit && $offset < $count );
 
 	return array(
 		'success' => true,
-		'lists'   => $result['data']['lists'] ?? array(),
-		'count'   => $result['data']['count'] ?? 0,
+		'lists'   => $lists,
+		'count'   => $count,
 	);
 }
 
