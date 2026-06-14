@@ -1,9 +1,9 @@
 === MCP Abilities - Brevo ===
 Contributors: devenia
-Tags: mcp, brevo, sendinblue, email, contacts
+Tags: mcp, brevo, sendinblue, email, wonderpush
 Requires at least: 6.9
-Tested up to: 6.9
-Stable tag: 1.0.4
+Tested up to: 7.0
+Stable tag: 1.0.5
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -12,7 +12,7 @@ Brevo (Sendinblue) integration for WordPress via MCP.
 
 == Description ==
 
-This add-on plugin exposes Brevo (formerly Sendinblue) functionality through MCP (Model Context Protocol). Your AI assistant can manage contacts, lists, folders, WordPress signup forms, senders, templates, webhooks, campaigns, and transactional email directly via Brevo.
+This add-on plugin exposes Brevo (formerly Sendinblue) functionality through MCP (Model Context Protocol). Your AI assistant can manage contacts, lists, folders, WordPress signup forms, WonderPush prompt localization, senders, templates, webhooks, campaigns, and transactional email directly via Brevo.
 
 It also includes a guarded generic Brevo API request ability for the full Brevo v3 API surface, including product areas that do not yet need a dedicated wrapper.
 
@@ -26,6 +26,11 @@ Part of the MCP Expose Abilities ecosystem.
 4. Activate the plugin
 
 == Changelog ==
+
+= 1.0.5 =
+* Added: Runtime WonderPush localization abilities for prompt/widget text stored in WordPress options
+* Added: Frontend WonderPush init-option merge for localized subscription bell, dialog, switch, and opt-in text
+* Added: WonderPush localization audit against known site languages
 
 = 1.0.4 =
 * Added: Generic Brevo v3 API request ability for endpoints not yet wrapped by a typed ability

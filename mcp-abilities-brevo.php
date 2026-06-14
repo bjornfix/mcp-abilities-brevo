@@ -2,8 +2,8 @@
 /**
  * Plugin Name: MCP Abilities - Brevo
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-brevo
- * Description: Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, and send emails via Brevo API.
- * Version: 1.0.4
+ * Description: Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, WonderPush localization, and send emails via Brevo API.
+ * Version: 1.0.5
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -20,6 +20,8 @@ declare( strict_types=1 );
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+
+const MCP_BREVO_WONDERPUSH_LOCALIZATION_OPTION = 'mcp_brevo_wonderpush_localization';
 
 /**
  * Check if Abilities API is available.
@@ -255,6 +257,340 @@ function mcp_brevo_build_wordpress_form_css(): string {
 }
 
 /**
+ * Return WonderPush localization fields that are safe to manage from MCP.
+ *
+ * @return array<string, array<string>>
+ */
+function mcp_brevo_wonderpush_allowed_text_fields(): array {
+	return array(
+		'subscriptionDialog' => array(
+			'title',
+			'message',
+			'positiveButton',
+			'negativeButton',
+		),
+		'subscriptionBell'   => array(
+			'dialogTitle',
+			'subscribeButtonTitle',
+			'unsubscribeButtonTitle',
+			'subscribeInviteText',
+			'alreadySubscribedText',
+			'alreadyUnsubscribedText',
+			'blockedText',
+			'subscribedText',
+			'unsubscribedText',
+			'advancedSettingsDescription',
+			'advancedSettingsFineprint',
+			'downloadDataButtonTitle',
+			'clearDataButtonTitle',
+		),
+		'subscriptionSwitch' => array(
+			'sentence',
+			'on',
+			'off',
+		),
+		'optInOptions'       => array(
+			'externalBoxMessage',
+			'externalBoxExampleTitle',
+			'externalBoxExampleMessage',
+			'externalBoxDisclaimer',
+			'externalBoxProcessingMessage',
+			'externalBoxSuccessMessage',
+			'externalBoxFailureMessage',
+			'externalBoxTooLongHint',
+			'externalBoxCloseHint',
+			'positiveButtonText',
+			'negativeButtonText',
+		),
+	);
+}
+
+/**
+ * Get the stored WonderPush localization configuration.
+ *
+ * @return array<string, mixed>
+ */
+function mcp_brevo_wonderpush_get_localization_config(): array {
+	$config = get_option( MCP_BREVO_WONDERPUSH_LOCALIZATION_OPTION, array() );
+	if ( ! is_array( $config ) ) {
+		$config = array();
+	}
+
+	$config = wp_parse_args(
+		$config,
+		array(
+			'enabled'    => true,
+			'languages'  => array(),
+			'updated_at' => '',
+		)
+	);
+
+	if ( ! is_array( $config['languages'] ) ) {
+		$config['languages'] = array();
+	}
+
+	return $config;
+}
+
+/**
+ * Normalize a language code used as a runtime WonderPush localization key.
+ *
+ * @param string $language Language code.
+ * @return string
+ */
+function mcp_brevo_wonderpush_normalize_language( string $language ): string {
+	$language = strtolower( trim( $language ) );
+	$language = str_replace( '_', '-', $language );
+	$language = preg_replace( '/[^a-z0-9-]/', '', $language );
+
+	if ( ! is_string( $language ) || '' === $language ) {
+		return '';
+	}
+
+	$parts = explode( '-', $language );
+	return (string) $parts[0];
+}
+
+/**
+ * Normalize a locale value to the form expected by WonderPush setLocale.
+ *
+ * @param string $locale Locale.
+ * @return string
+ */
+function mcp_brevo_wonderpush_normalize_locale( string $locale ): string {
+	$locale = trim( str_replace( '_', '-', $locale ) );
+	if ( ! preg_match( '/^[a-z]{2,3}(?:-[A-Z]{2})?$/', $locale ) ) {
+		return '';
+	}
+
+	$parts = explode( '-', $locale );
+	if ( 2 === count( $parts ) ) {
+		return strtolower( $parts[0] ) . '-' . strtoupper( $parts[1] );
+	}
+
+	return strtolower( $parts[0] );
+}
+
+/**
+ * Sanitize WonderPush text option input.
+ *
+ * @param array $texts Raw text groups.
+ * @return array<string, array<string, string>>
+ */
+function mcp_brevo_wonderpush_sanitize_texts( array $texts ): array {
+	$allowed = mcp_brevo_wonderpush_allowed_text_fields();
+	$output  = array();
+
+	foreach ( $allowed as $group => $keys ) {
+		if ( empty( $texts[ $group ] ) || ! is_array( $texts[ $group ] ) ) {
+			continue;
+		}
+
+		foreach ( $keys as $key ) {
+			if ( ! array_key_exists( $key, $texts[ $group ] ) ) {
+				continue;
+			}
+
+			$value = sanitize_text_field( (string) $texts[ $group ][ $key ] );
+			if ( '' !== $value ) {
+				$output[ $group ][ $key ] = $value;
+			}
+		}
+	}
+
+	return $output;
+}
+
+/**
+ * Build an MCP schema for WonderPush text option groups.
+ *
+ * @return array<string, mixed>
+ */
+function mcp_brevo_wonderpush_texts_schema(): array {
+	$properties = array();
+
+	foreach ( mcp_brevo_wonderpush_allowed_text_fields() as $group => $keys ) {
+		$group_properties = array();
+		foreach ( $keys as $key ) {
+			$group_properties[ $key ] = array( 'type' => 'string' );
+		}
+
+		$properties[ $group ] = array(
+			'type'                 => 'object',
+			'properties'           => $group_properties,
+			'additionalProperties' => false,
+		);
+	}
+
+	return array(
+		'type'                 => 'object',
+		'properties'           => $properties,
+		'additionalProperties' => false,
+	);
+}
+
+/**
+ * Infer known site languages from Devenia translation metadata when present.
+ *
+ * @return array<string, array<string, string>>
+ */
+function mcp_brevo_wonderpush_get_site_languages(): array {
+	$languages = array();
+	$locale    = get_locale();
+	$code      = mcp_brevo_wonderpush_normalize_language( $locale );
+	if ( '' !== $code ) {
+		$languages[ $code ] = array(
+			'language' => $code,
+			'locale'   => mcp_brevo_wonderpush_normalize_locale( $locale ),
+			'source'   => 'site_locale',
+		);
+	}
+
+	$translation_languages = get_option( 'devenia_ai_translations_languages', array() );
+	if ( is_array( $translation_languages ) ) {
+		foreach ( $translation_languages as $raw_code => $data ) {
+			$lang_code = mcp_brevo_wonderpush_normalize_language( (string) $raw_code );
+			if ( '' === $lang_code ) {
+				continue;
+			}
+
+			$lang_locale = '';
+			if ( is_array( $data ) ) {
+				$lang_locale = mcp_brevo_wonderpush_normalize_locale( (string) ( $data['locale'] ?? $data['wp_locale'] ?? '' ) );
+			}
+
+			$languages[ $lang_code ] = array(
+				'language' => $lang_code,
+				'locale'   => $lang_locale,
+				'source'   => 'devenia_ai_translations_languages',
+			);
+		}
+	}
+
+	return $languages;
+}
+
+/**
+ * Detect the current frontend language from URL prefix and site language data.
+ *
+ * @return string
+ */
+function mcp_brevo_wonderpush_detect_current_language(): string {
+	$known_languages = mcp_brevo_wonderpush_get_site_languages();
+	$request_uri     = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( (string) $_SERVER['REQUEST_URI'] ) ) : '';
+	$path            = (string) wp_parse_url( $request_uri, PHP_URL_PATH );
+	$first_segment   = trim( explode( '/', trim( $path, '/' ) )[0] ?? '' );
+	$first_segment   = mcp_brevo_wonderpush_normalize_language( $first_segment );
+
+	if ( '' !== $first_segment && isset( $known_languages[ $first_segment ] ) ) {
+		return $first_segment;
+	}
+
+	return mcp_brevo_wonderpush_normalize_language( get_locale() ) ?: 'en';
+}
+
+/**
+ * Build the WonderPush init options for the current frontend request.
+ *
+ * @return array<string, mixed>
+ */
+function mcp_brevo_wonderpush_get_current_init_options(): array {
+	$config   = mcp_brevo_wonderpush_get_localization_config();
+	$language = mcp_brevo_wonderpush_detect_current_language();
+
+	if ( empty( $config['enabled'] ) || empty( $config['languages'][ $language ] ) || ! is_array( $config['languages'][ $language ] ) ) {
+		return array();
+	}
+
+	$language_config = $config['languages'][ $language ];
+	$texts           = isset( $language_config['texts'] ) && is_array( $language_config['texts'] ) ? mcp_brevo_wonderpush_sanitize_texts( $language_config['texts'] ) : array();
+	$locale          = mcp_brevo_wonderpush_normalize_locale( (string) ( $language_config['locale'] ?? '' ) );
+	$options         = array();
+
+	foreach ( $texts as $group => $group_texts ) {
+		if ( ! empty( $group_texts ) ) {
+			$options[ $group ] = $group_texts;
+		}
+	}
+
+	if ( '' !== $locale ) {
+		$options['locale'] = $locale;
+	}
+
+	return $options;
+}
+
+/**
+ * Enqueue a pre-init WonderPush patch so localized options are merged into the Brevo/WonderPush init call.
+ */
+function mcp_brevo_wonderpush_enqueue_preinit_script(): void {
+	if ( is_admin() || wp_doing_ajax() || wp_is_json_request() ) {
+		return;
+	}
+
+	$options = mcp_brevo_wonderpush_get_current_init_options();
+	if ( empty( $options ) ) {
+		return;
+	}
+
+	$locale = (string) ( $options['locale'] ?? '' );
+	unset( $options['locale'] );
+
+	$payload = array(
+		'options' => $options,
+		'locale'  => $locale,
+	);
+
+	$script_template = <<<'JS'
+(function(config){
+	if (!config || (!config.locale && !config.options)) {
+		return;
+	}
+	function merge(target, source) {
+		target = target && typeof target === 'object' ? target : {};
+		source = source && typeof source === 'object' ? source : {};
+		Object.keys(source).forEach(function(key) {
+			if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+				target[key] = merge(target[key], source[key]);
+			} else {
+				target[key] = source[key];
+			}
+		});
+		return target;
+	}
+	window.WonderPush = window.WonderPush || [];
+	var queue = window.WonderPush;
+	var originalPush = queue.push;
+	queue.push = function() {
+		for (var i = 0; i < arguments.length; i++) {
+			var command = arguments[i];
+			if (Array.isArray(command) && command[0] === 'init' && command[1]) {
+				command[1] = merge(command[1], config.options || {});
+			}
+		}
+		return originalPush.apply(this, arguments);
+	};
+	if (config.locale) {
+		window.addEventListener('load', function() {
+			window.WonderPush = window.WonderPush || [];
+			window.WonderPush.push(function() {
+				if (window.WonderPush && typeof window.WonderPush.setLocale === 'function') {
+					window.WonderPush.setLocale(config.locale);
+				}
+			});
+		});
+	}
+})(MCP_BREVO_WONDERPUSH_PAYLOAD);
+JS;
+	$script = str_replace( 'MCP_BREVO_WONDERPUSH_PAYLOAD', (string) wp_json_encode( $payload ), $script_template );
+
+	wp_register_script( 'mcp-brevo-wonderpush-localization', false, array(), '1.0.5', false );
+	wp_enqueue_script( 'mcp-brevo-wonderpush-localization' );
+	wp_add_inline_script( 'mcp-brevo-wonderpush-localization', $script, 'before' );
+}
+add_action( 'wp_enqueue_scripts', 'mcp_brevo_wonderpush_enqueue_preinit_script', 0 );
+
+/**
  * Sanitize Brevo form markup while preserving normal form fields.
  *
  * @param string $html Form HTML.
@@ -437,6 +773,232 @@ function mcp_register_brevo_abilities(): void {
 			),
 			'execute_callback'    => function (): array {
 				return mcp_brevo_api_request( 'GET', 'account' );
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// WONDERPUSH - Runtime localization for official Brevo/WonderPush frontend UI.
+	// =========================================================================
+	wp_register_ability(
+		'brevo/wonderpush-get-localization',
+		array(
+			'label'               => 'Get WonderPush Localization',
+			'description'         => 'Read runtime WonderPush prompt/widget localization stored by this Brevo MCP add-on.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'includeAllowedFields' => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'Include the managed WonderPush text field allowlist in the response.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'          => array( 'type' => 'boolean' ),
+					'enabled'          => array( 'type' => 'boolean' ),
+					'languages'        => array( 'type' => 'object' ),
+					'site_languages'   => array( 'type' => 'object' ),
+					'allowed_fields'   => array( 'type' => 'object' ),
+					'current_language' => array( 'type' => 'string' ),
+					'current_options'  => array( 'type' => 'object' ),
+					'message'          => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$config                 = mcp_brevo_wonderpush_get_localization_config();
+				$include_allowed_fields = isset( $input['includeAllowedFields'] ) ? (bool) $input['includeAllowedFields'] : true;
+
+				return array(
+					'success'          => true,
+					'enabled'          => (bool) $config['enabled'],
+					'languages'        => $config['languages'],
+					'site_languages'   => mcp_brevo_wonderpush_get_site_languages(),
+					'allowed_fields'   => $include_allowed_fields ? mcp_brevo_wonderpush_allowed_text_fields() : array(),
+					'current_language' => mcp_brevo_wonderpush_detect_current_language(),
+					'current_options'  => mcp_brevo_wonderpush_get_current_init_options(),
+					'message'          => 'WonderPush localization retrieved.',
+				);
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	wp_register_ability(
+		'brevo/wonderpush-update-localization',
+		array(
+			'label'               => 'Update WonderPush Localization',
+			'description'         => 'Create or update localized WonderPush prompt/widget text for one language. This changes runtime WordPress option data, not plugin language files.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'language' ),
+				'properties'           => array(
+					'language' => array(
+						'type'        => 'string',
+						'description' => 'Language code such as nb, de, fr, es, sv, da, fi, or ar.',
+					),
+					'locale'   => array(
+						'type'        => 'string',
+						'description' => 'Optional locale for WonderPush setLocale, such as nb-NO or de-DE.',
+					),
+					'enabled'  => array(
+						'type'        => 'boolean',
+						'description' => 'Enable or disable the frontend localization injector globally.',
+					),
+					'texts'    => mcp_brevo_wonderpush_texts_schema(),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'  => array( 'type' => 'boolean' ),
+					'language' => array( 'type' => 'string' ),
+					'locale'   => array( 'type' => 'string' ),
+					'texts'    => array( 'type' => 'object' ),
+					'message'  => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$language = mcp_brevo_wonderpush_normalize_language( (string) ( $input['language'] ?? '' ) );
+				if ( '' === $language ) {
+					return array( 'success' => false, 'message' => 'A valid language code is required.' );
+				}
+
+				$config = mcp_brevo_wonderpush_get_localization_config();
+				if ( isset( $input['enabled'] ) ) {
+					$config['enabled'] = (bool) $input['enabled'];
+				}
+
+				$existing = isset( $config['languages'][ $language ] ) && is_array( $config['languages'][ $language ] ) ? $config['languages'][ $language ] : array();
+				$locale   = isset( $input['locale'] ) ? mcp_brevo_wonderpush_normalize_locale( (string) $input['locale'] ) : (string) ( $existing['locale'] ?? '' );
+				if ( isset( $input['locale'] ) && '' === $locale ) {
+					return array( 'success' => false, 'message' => 'Locale must look like nb, nb-NO, or de-DE.' );
+				}
+
+				$texts = isset( $existing['texts'] ) && is_array( $existing['texts'] ) ? mcp_brevo_wonderpush_sanitize_texts( $existing['texts'] ) : array();
+				if ( isset( $input['texts'] ) && is_array( $input['texts'] ) ) {
+					$new_texts = mcp_brevo_wonderpush_sanitize_texts( $input['texts'] );
+					foreach ( $new_texts as $group => $group_texts ) {
+						$texts[ $group ] = array_merge( $texts[ $group ] ?? array(), $group_texts );
+					}
+				}
+
+				if ( '' === $locale && empty( $texts ) ) {
+					return array( 'success' => false, 'message' => 'Provide a locale or at least one localized text value.' );
+				}
+
+				$config['languages'][ $language ] = array(
+					'locale'     => $locale,
+					'texts'      => $texts,
+					'updated_at' => current_time( 'mysql', true ),
+				);
+				$config['updated_at'] = current_time( 'mysql', true );
+
+				update_option( MCP_BREVO_WONDERPUSH_LOCALIZATION_OPTION, $config, false );
+
+				return array(
+					'success'  => true,
+					'language' => $language,
+					'locale'   => $locale,
+					'texts'    => $texts,
+					'message'  => 'WonderPush localization updated.',
+				);
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	wp_register_ability(
+		'brevo/wonderpush-audit-localization',
+		array(
+			'label'               => 'Audit WonderPush Localization',
+			'description'         => 'Compare known site languages against stored WonderPush prompt/widget localization and report missing runtime text coverage.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'requireTexts' => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'When true, flag configured languages that only have a locale and no text overrides.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'            => array( 'type' => 'boolean' ),
+					'passed'             => array( 'type' => 'boolean' ),
+					'enabled'            => array( 'type' => 'boolean' ),
+					'site_languages'     => array( 'type' => 'object' ),
+					'configured'         => array( 'type' => 'array' ),
+					'missing_languages'  => array( 'type' => 'array' ),
+					'languages_no_texts' => array( 'type' => 'array' ),
+					'message'            => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$config          = mcp_brevo_wonderpush_get_localization_config();
+				$site_languages  = mcp_brevo_wonderpush_get_site_languages();
+				$configured      = array_keys( $config['languages'] );
+				$require_texts   = isset( $input['requireTexts'] ) ? (bool) $input['requireTexts'] : true;
+				$missing         = array();
+				$languages_empty = array();
+
+				foreach ( $site_languages as $language => $data ) {
+					if ( ! isset( $config['languages'][ $language ] ) ) {
+						$missing[] = $language;
+						continue;
+					}
+
+					$texts = $config['languages'][ $language ]['texts'] ?? array();
+					if ( $require_texts && empty( $texts ) ) {
+						$languages_empty[] = $language;
+					}
+				}
+
+				$passed = (bool) $config['enabled'] && empty( $missing ) && empty( $languages_empty );
+
+				return array(
+					'success'            => true,
+					'passed'             => $passed,
+					'enabled'            => (bool) $config['enabled'],
+					'site_languages'     => $site_languages,
+					'configured'         => $configured,
+					'missing_languages'  => $missing,
+					'languages_no_texts' => $languages_empty,
+					'message'            => $passed ? 'WonderPush localization coverage looks complete for known site languages.' : 'WonderPush localization coverage is incomplete.',
+				);
 			},
 			'permission_callback' => 'mcp_brevo_permission_callback',
 			'meta'                => array(

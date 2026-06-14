@@ -1,6 +1,6 @@
 # MCP Abilities - Brevo
 
-Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, and send emails via Brevo API.
+Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, WonderPush localization, and send emails via Brevo API.
 
 [![GitHub release](https://img.shields.io/github/v/release/bjornfix/mcp-abilities-brevo)](https://github.com/bjornfix/mcp-abilities-brevo/releases)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
@@ -8,13 +8,13 @@ Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, and send emails vi
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 1.0.4
+**Stable tag:** 1.0.5
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
 ## What It Does
 
-Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, and send emails via Brevo API.
+Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, WonderPush localization, and send emails via Brevo API.
 
 This plugin is part of the Devenia MCP abilities ecosystem. It gives an MCP-capable agent a focused, authenticated way to work with Brevo work inside WordPress through MCP.
 
@@ -107,12 +107,15 @@ If you are new to the stack, use this order:
 
 If you skip base-stack verification and start with add-ons immediately, troubleshooting gets harder than it needs to be.
 
-## Abilities (42)
+## Abilities (45)
 
 | Ability | Description |
 |---------|-------------|
 | `brevo/api-request` | Call any Brevo v3 endpoint with the configured API key |
 | `brevo/get-account` | Get Brevo account and plan details |
+| `brevo/wonderpush-get-localization` | Read stored WonderPush prompt/widget localization |
+| `brevo/wonderpush-update-localization` | Create or update runtime WonderPush localization for one language |
+| `brevo/wonderpush-audit-localization` | Audit WonderPush localization coverage against known site languages |
 | `brevo/list-contacts` | List contacts with pagination |
 | `brevo/get-contact` | Get a single contact by email or ID |
 | `brevo/create-contact` | Create a contact |
@@ -222,7 +225,35 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 }
 ```
 
+### Localize WonderPush subscription UI
+
+```json
+{
+  "ability_name": "brevo/wonderpush-update-localization",
+  "parameters": {
+    "language": "nb",
+    "locale": "nb-NO",
+    "texts": {
+      "subscriptionBell": {
+        "dialogTitle": "Administrer varsler",
+        "subscribeButtonTitle": "Abonner",
+        "advancedSettingsDescription": "Dine personlige varslingsdata:"
+      },
+      "subscriptionDialog": {
+        "positiveButton": "Abonner",
+        "negativeButton": "Senere"
+      }
+    }
+  }
+}
+```
+
 ## Changelog
+
+### 1.0.5
+- Added: Runtime WonderPush localization abilities for prompt/widget text stored in WordPress options
+- Added: Frontend WonderPush init-option merge for localized subscription bell, dialog, switch, and opt-in text
+- Added: WonderPush localization audit against known site languages
 
 ### 1.0.4
 - Added: Generic Brevo v3 API request ability for endpoints not yet wrapped by a typed ability
