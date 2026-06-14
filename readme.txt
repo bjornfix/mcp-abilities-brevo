@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, brevo, sendinblue, email, wonderpush
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 1.0.5
+Stable tag: 1.0.6
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -26,6 +26,11 @@ Part of the MCP Expose Abilities ecosystem.
 4. Activate the plugin
 
 == Changelog ==
+
+= 1.0.6 =
+* Added: Language-audience audit for Brevo contact language attributes and per-language lists
+* Added: Ability to ensure language-specific Brevo audiences from the site language registry
+* Added: Contact upsert ability that stores the normalized language attribute and adds the contact to the matching language list
 
 = 1.0.5 =
 * Added: Runtime WonderPush localization abilities for prompt/widget text stored in WordPress options

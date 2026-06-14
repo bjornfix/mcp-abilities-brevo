@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Brevo
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-brevo
  * Description: Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, WonderPush localization, and send emails via Brevo API.
- * Version: 1.0.5
+ * Version: 1.0.6
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -59,6 +59,7 @@ function mcp_brevo_add_default_annotations( array $args, string $ability_name ):
 		'brevo/list-contacts',
 		'brevo/get-contact',
 		'brevo/list-lists',
+		'brevo/list-language-audiences',
 		'brevo/get-list',
 		'brevo/list-wordpress-forms',
 		'brevo/get-wordpress-form',
@@ -93,6 +94,288 @@ function mcp_brevo_add_default_annotations( array $args, string $ability_name ):
 	);
 
 	return $args;
+}
+
+/**
+ * Sanitize a Brevo contact attribute name.
+ *
+ * @param string $name Attribute name.
+ * @return string
+ */
+function mcp_brevo_sanitize_attribute_name( string $name ): string {
+	$name = strtoupper( trim( $name ) );
+	$name = preg_replace( '/[^A-Z0-9_]/', '_', $name );
+	$name = trim( (string) $name, '_' );
+
+	return '' === $name ? 'LANGUAGE' : substr( $name, 0, 50 );
+}
+
+/**
+ * Sanitize scalar contact attribute values.
+ *
+ * @param array $attributes Raw attributes.
+ * @return array<string, scalar>
+ */
+function mcp_brevo_sanitize_contact_attributes( array $attributes ): array {
+	$output = array();
+
+	foreach ( $attributes as $key => $value ) {
+		$attribute_name = mcp_brevo_sanitize_attribute_name( (string) $key );
+		if ( is_bool( $value ) || is_int( $value ) || is_float( $value ) ) {
+			$output[ $attribute_name ] = $value;
+			continue;
+		}
+
+		if ( is_scalar( $value ) ) {
+			$output[ $attribute_name ] = sanitize_text_field( (string) $value );
+		}
+	}
+
+	return $output;
+}
+
+/**
+ * Build the default Brevo list name for a language.
+ *
+ * @param string $language   Language code.
+ * @param string $list_prefix List name prefix.
+ * @return string
+ */
+function mcp_brevo_language_list_name( string $language, string $list_prefix ): string {
+	$list_prefix = sanitize_text_field( trim( $list_prefix ) );
+	if ( '' === $list_prefix ) {
+		$list_prefix = 'Devenia';
+	}
+
+	return $list_prefix . ' ' . strtoupper( mcp_brevo_wonderpush_normalize_language( $language ) );
+}
+
+/**
+ * Return configured languages, optionally filtered by input.
+ *
+ * @param array $requested_languages Requested language codes.
+ * @return array<string, array<string, string>>
+ */
+function mcp_brevo_get_requested_languages( array $requested_languages = array() ): array {
+	$site_languages = mcp_brevo_wonderpush_get_site_languages();
+	if ( empty( $requested_languages ) ) {
+		return $site_languages;
+	}
+
+	$output = array();
+	foreach ( $requested_languages as $language ) {
+		$language = mcp_brevo_wonderpush_normalize_language( (string) $language );
+		if ( '' === $language ) {
+			continue;
+		}
+
+		$output[ $language ] = $site_languages[ $language ] ?? array(
+			'language' => $language,
+			'locale'   => '',
+			'source'   => 'input',
+		);
+	}
+
+	return $output;
+}
+
+/**
+ * List Brevo attributes and detect whether the language attribute exists.
+ *
+ * @param string $attribute_name Attribute name.
+ * @return array
+ */
+function mcp_brevo_get_language_attribute_status( string $attribute_name ): array {
+	$attribute_name = mcp_brevo_sanitize_attribute_name( $attribute_name );
+	$result         = mcp_brevo_api_request( 'GET', 'contacts/attributes' );
+	if ( empty( $result['success'] ) ) {
+		return array(
+			'success' => false,
+			'message' => $result['message'] ?? 'Could not list Brevo attributes.',
+		);
+	}
+
+	$attributes = $result['data']['attributes'] ?? $result['data'] ?? array();
+	$exists     = false;
+	foreach ( (array) $attributes as $attribute ) {
+		if ( ! is_array( $attribute ) ) {
+			continue;
+		}
+
+		$name = strtoupper( (string) ( $attribute['name'] ?? '' ) );
+		if ( $attribute_name === $name ) {
+			$exists = true;
+			break;
+		}
+	}
+
+	return array(
+		'success'        => true,
+		'attribute_name' => $attribute_name,
+		'exists'         => $exists,
+		'attributes'     => $attributes,
+	);
+}
+
+/**
+ * Ensure the Brevo language attribute exists.
+ *
+ * @param string $attribute_name Attribute name.
+ * @param bool   $dry_run        Whether to only report the action.
+ * @return array
+ */
+function mcp_brevo_ensure_language_attribute( string $attribute_name, bool $dry_run = false ): array {
+	$status = mcp_brevo_get_language_attribute_status( $attribute_name );
+	if ( empty( $status['success'] ) ) {
+		return $status;
+	}
+
+	if ( ! empty( $status['exists'] ) ) {
+		return array(
+			'success'        => true,
+			'attribute_name' => $status['attribute_name'],
+			'exists'         => true,
+			'created'        => false,
+			'dry_run'        => $dry_run,
+			'message'        => 'Language attribute already exists.',
+		);
+	}
+
+	if ( $dry_run ) {
+		return array(
+			'success'        => true,
+			'attribute_name' => $status['attribute_name'],
+			'exists'         => false,
+			'created'        => false,
+			'dry_run'        => true,
+			'message'        => 'Language attribute would be created.',
+		);
+	}
+
+	$result = mcp_brevo_api_request(
+		'POST',
+		'contacts/attributes/normal/' . rawurlencode( (string) $status['attribute_name'] ),
+		array( 'type' => 'text' )
+	);
+	if ( empty( $result['success'] ) ) {
+		return $result;
+	}
+
+	return array(
+		'success'        => true,
+		'attribute_name' => $status['attribute_name'],
+		'exists'         => false,
+		'created'        => true,
+		'dry_run'        => false,
+		'message'        => 'Language attribute created.',
+	);
+}
+
+/**
+ * Fetch Brevo contact lists.
+ *
+ * @return array
+ */
+function mcp_brevo_get_all_lists(): array {
+	$result = mcp_brevo_api_request( 'GET', 'contacts/lists?limit=1000&offset=0' );
+	if ( empty( $result['success'] ) ) {
+		return $result;
+	}
+
+	return array(
+		'success' => true,
+		'lists'   => $result['data']['lists'] ?? array(),
+		'count'   => $result['data']['count'] ?? 0,
+	);
+}
+
+/**
+ * Find a Brevo list by exact name, case-insensitive.
+ *
+ * @param array  $lists Lists.
+ * @param string $name  List name.
+ * @return array|null
+ */
+function mcp_brevo_find_list_by_name( array $lists, string $name ): ?array {
+	foreach ( $lists as $list ) {
+		if ( ! is_array( $list ) ) {
+			continue;
+		}
+
+		if ( strtolower( (string) ( $list['name'] ?? '' ) ) === strtolower( $name ) ) {
+			return $list;
+		}
+	}
+
+	return null;
+}
+
+/**
+ * Build or create a language-list mapping.
+ *
+ * @param array  $languages   Languages.
+ * @param int    $folder_id   Brevo folder ID for new lists.
+ * @param string $list_prefix List prefix.
+ * @param bool   $dry_run     Whether to only report actions.
+ * @return array
+ */
+function mcp_brevo_ensure_language_lists( array $languages, int $folder_id, string $list_prefix, bool $dry_run = false ): array {
+	$lists_result = mcp_brevo_get_all_lists();
+	if ( empty( $lists_result['success'] ) ) {
+		return $lists_result;
+	}
+
+	$existing_lists = (array) $lists_result['lists'];
+	$audiences      = array();
+	foreach ( $languages as $language => $language_data ) {
+		$list_name = mcp_brevo_language_list_name( (string) $language, $list_prefix );
+		$existing  = mcp_brevo_find_list_by_name( $existing_lists, $list_name );
+		$created   = false;
+
+		if ( null === $existing && ! $dry_run ) {
+			if ( $folder_id <= 0 ) {
+				return array(
+					'success' => false,
+					'message' => 'folderId is required to create missing language lists.',
+				);
+			}
+
+			$create_result = mcp_brevo_api_request(
+				'POST',
+				'contacts/lists',
+				array(
+					'name'     => $list_name,
+					'folderId' => $folder_id,
+				)
+			);
+			if ( empty( $create_result['success'] ) ) {
+				return $create_result;
+			}
+
+			$existing = array(
+				'id'       => $create_result['data']['id'] ?? null,
+				'name'     => $list_name,
+				'folderId' => $folder_id,
+			);
+			$existing_lists[] = $existing;
+			$created          = true;
+		}
+
+		$audiences[ $language ] = array(
+			'language'  => (string) $language,
+			'locale'    => is_array( $language_data ) ? (string) ( $language_data['locale'] ?? '' ) : '',
+			'list_name' => $list_name,
+			'list_id'   => isset( $existing['id'] ) ? (int) $existing['id'] : 0,
+			'exists'    => null !== $existing,
+			'created'   => $created,
+			'dry_run'   => $dry_run,
+		);
+	}
+
+	return array(
+		'success'   => true,
+		'audiences' => $audiences,
+	);
 }
 
 /**
@@ -584,7 +867,7 @@ function mcp_brevo_wonderpush_enqueue_preinit_script(): void {
 JS;
 	$script = str_replace( 'MCP_BREVO_WONDERPUSH_PAYLOAD', (string) wp_json_encode( $payload ), $script_template );
 
-	wp_register_script( 'mcp-brevo-wonderpush-localization', false, array(), '1.0.5', false );
+	wp_register_script( 'mcp-brevo-wonderpush-localization', false, array(), '1.0.6', false );
 	wp_enqueue_script( 'mcp-brevo-wonderpush-localization' );
 	wp_add_inline_script( 'mcp-brevo-wonderpush-localization', $script, 'before' );
 }
@@ -1616,6 +1899,318 @@ function mcp_register_brevo_abilities(): void {
 					'readonly'    => false,
 					'destructive' => false,
 					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// LANGUAGE AUDIENCES - Keep Brevo audience structure aligned with site languages.
+	// =========================================================================
+	wp_register_ability(
+		'brevo/list-language-audiences',
+		array(
+			'label'               => 'List Brevo Language Audiences',
+			'description'         => 'Audit known site languages against Brevo language attribute and language-specific contact lists.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'languages'     => array(
+						'type'        => 'array',
+						'items'       => array( 'type' => 'string' ),
+						'description' => 'Optional language codes to inspect. Defaults to all known site languages.',
+					),
+					'listPrefix'    => array(
+						'type'        => 'string',
+						'default'     => 'Devenia',
+						'description' => 'Prefix for language list names, e.g. Devenia creates Devenia NB.',
+					),
+					'attributeName' => array(
+						'type'        => 'string',
+						'default'     => 'LANGUAGE',
+						'description' => 'Brevo contact attribute used for the normalized language code.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'          => array( 'type' => 'boolean' ),
+					'passed'           => array( 'type' => 'boolean' ),
+					'attribute_name'   => array( 'type' => 'string' ),
+					'attribute_exists' => array( 'type' => 'boolean' ),
+					'site_languages'   => array( 'type' => 'object' ),
+					'audiences'        => array( 'type' => 'object' ),
+					'missing_lists'    => array( 'type' => 'array' ),
+					'message'          => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$attribute_name = mcp_brevo_sanitize_attribute_name( (string) ( $input['attributeName'] ?? 'LANGUAGE' ) );
+				$list_prefix    = sanitize_text_field( (string) ( $input['listPrefix'] ?? 'Devenia' ) );
+				$languages      = mcp_brevo_get_requested_languages( (array) ( $input['languages'] ?? array() ) );
+
+				$attribute = mcp_brevo_get_language_attribute_status( $attribute_name );
+				if ( empty( $attribute['success'] ) ) {
+					return $attribute;
+				}
+
+				$lists = mcp_brevo_ensure_language_lists( $languages, 0, $list_prefix, true );
+				if ( empty( $lists['success'] ) ) {
+					return $lists;
+				}
+
+				$missing = array();
+				foreach ( $lists['audiences'] as $language => $audience ) {
+					if ( empty( $audience['exists'] ) ) {
+						$missing[] = $language;
+					}
+				}
+
+				$passed = ! empty( $attribute['exists'] ) && empty( $missing );
+				return array(
+					'success'          => true,
+					'passed'           => $passed,
+					'attribute_name'   => $attribute_name,
+					'attribute_exists' => (bool) $attribute['exists'],
+					'site_languages'   => $languages,
+					'audiences'        => $lists['audiences'],
+					'missing_lists'    => $missing,
+					'message'          => $passed ? 'Brevo language audiences look complete.' : 'Brevo language audiences are incomplete.',
+				);
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	wp_register_ability(
+		'brevo/ensure-language-audiences',
+		array(
+			'label'               => 'Ensure Brevo Language Audiences',
+			'description'         => 'Create the Brevo language attribute and language-specific contact lists for known site languages.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'folderId' ),
+				'properties'           => array(
+					'folderId'      => array(
+						'type'        => 'integer',
+						'description' => 'Brevo folder ID where missing language lists should be created.',
+					),
+					'languages'     => array(
+						'type'        => 'array',
+						'items'       => array( 'type' => 'string' ),
+						'description' => 'Optional language codes to ensure. Defaults to all known site languages.',
+					),
+					'listPrefix'    => array(
+						'type'        => 'string',
+						'default'     => 'Devenia',
+						'description' => 'Prefix for language list names, e.g. Devenia creates Devenia NB.',
+					),
+					'attributeName' => array(
+						'type'        => 'string',
+						'default'     => 'LANGUAGE',
+						'description' => 'Brevo contact attribute used for the normalized language code.',
+					),
+					'dryRun'        => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'Report what would be created without changing Brevo.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'   => array( 'type' => 'boolean' ),
+					'attribute' => array( 'type' => 'object' ),
+					'audiences' => array( 'type' => 'object' ),
+					'dry_run'   => array( 'type' => 'boolean' ),
+					'message'   => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$folder_id      = (int) ( $input['folderId'] ?? 0 );
+				$dry_run        = ! empty( $input['dryRun'] );
+				$attribute_name = mcp_brevo_sanitize_attribute_name( (string) ( $input['attributeName'] ?? 'LANGUAGE' ) );
+				$list_prefix    = sanitize_text_field( (string) ( $input['listPrefix'] ?? 'Devenia' ) );
+				$languages      = mcp_brevo_get_requested_languages( (array) ( $input['languages'] ?? array() ) );
+
+				if ( empty( $languages ) ) {
+					return array( 'success' => false, 'message' => 'No site languages found or provided.' );
+				}
+				if ( $folder_id <= 0 && ! $dry_run ) {
+					return array( 'success' => false, 'message' => 'folderId is required to create missing language lists.' );
+				}
+
+				$attribute = mcp_brevo_ensure_language_attribute( $attribute_name, $dry_run );
+				if ( empty( $attribute['success'] ) ) {
+					return $attribute;
+				}
+
+				$lists = mcp_brevo_ensure_language_lists( $languages, $folder_id, $list_prefix, $dry_run );
+				if ( empty( $lists['success'] ) ) {
+					return $lists;
+				}
+
+				return array(
+					'success'   => true,
+					'attribute' => $attribute,
+					'audiences' => $lists['audiences'],
+					'dry_run'   => $dry_run,
+					'message'   => $dry_run ? 'Brevo language audiences dry-run completed.' : 'Brevo language audiences ensured.',
+				);
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	wp_register_ability(
+		'brevo/upsert-language-contact',
+		array(
+			'label'               => 'Upsert Brevo Language Contact',
+			'description'         => 'Create or update one Brevo contact with a language attribute and the matching language audience list.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'email', 'language' ),
+				'properties'           => array(
+					'email'         => array(
+						'type'        => 'string',
+						'format'      => 'email',
+						'description' => 'Contact email address.',
+					),
+					'language'      => array(
+						'type'        => 'string',
+						'description' => 'Language code such as en, nb, de, fr, es, sv, da, fi, or ar.',
+					),
+					'attributes'    => array(
+						'type'        => 'object',
+						'description' => 'Additional scalar Brevo contact attributes.',
+					),
+					'listId'        => array(
+						'type'        => 'integer',
+						'description' => 'Explicit language list ID. If omitted, the ability looks up listPrefix + language.',
+					),
+					'folderId'      => array(
+						'type'        => 'integer',
+						'description' => 'Folder ID for creating the list when ensureList is true.',
+					),
+					'ensureList'    => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'Create missing language list before adding the contact.',
+					),
+					'listPrefix'    => array(
+						'type'        => 'string',
+						'default'     => 'Devenia',
+						'description' => 'Prefix for language list names.',
+					),
+					'attributeName' => array(
+						'type'        => 'string',
+						'default'     => 'LANGUAGE',
+						'description' => 'Brevo contact attribute used for the normalized language code.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'        => array( 'type' => 'boolean' ),
+					'email'          => array( 'type' => 'string' ),
+					'language'       => array( 'type' => 'string' ),
+					'attribute_name' => array( 'type' => 'string' ),
+					'list_id'        => array( 'type' => 'integer' ),
+					'list_name'      => array( 'type' => 'string' ),
+					'message'        => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$email = sanitize_email( (string) ( $input['email'] ?? '' ) );
+				if ( ! is_email( $email ) ) {
+					return array( 'success' => false, 'message' => 'A valid email is required.' );
+				}
+
+				$language = mcp_brevo_wonderpush_normalize_language( (string) ( $input['language'] ?? '' ) );
+				if ( '' === $language ) {
+					return array( 'success' => false, 'message' => 'A valid language code is required.' );
+				}
+
+				$attribute_name = mcp_brevo_sanitize_attribute_name( (string) ( $input['attributeName'] ?? 'LANGUAGE' ) );
+				$list_prefix    = sanitize_text_field( (string) ( $input['listPrefix'] ?? 'Devenia' ) );
+				$list_name      = mcp_brevo_language_list_name( $language, $list_prefix );
+				$list_id        = (int) ( $input['listId'] ?? 0 );
+
+				if ( $list_id <= 0 ) {
+					$ensure_list = ! empty( $input['ensureList'] );
+					$folder_id   = (int) ( $input['folderId'] ?? 0 );
+					$lists       = $ensure_list
+						? mcp_brevo_ensure_language_lists( array( $language => array( 'language' => $language, 'locale' => '', 'source' => 'input' ) ), $folder_id, $list_prefix, false )
+						: mcp_brevo_ensure_language_lists( array( $language => array( 'language' => $language, 'locale' => '', 'source' => 'input' ) ), 0, $list_prefix, true );
+					if ( empty( $lists['success'] ) ) {
+						return $lists;
+					}
+
+					$list_id = (int) ( $lists['audiences'][ $language ]['list_id'] ?? 0 );
+					if ( $list_id <= 0 ) {
+						return array(
+							'success' => false,
+							'message' => 'Language list was not found. Provide listId or set ensureList with folderId.',
+						);
+					}
+				}
+
+				$attributes                    = mcp_brevo_sanitize_contact_attributes( (array) ( $input['attributes'] ?? array() ) );
+				$attributes[ $attribute_name ] = $language;
+
+				$result = mcp_brevo_api_request(
+					'POST',
+					'contacts',
+					array(
+						'email'         => $email,
+						'attributes'    => $attributes,
+						'listIds'       => array( $list_id ),
+						'updateEnabled' => true,
+					)
+				);
+				if ( empty( $result['success'] ) ) {
+					return $result;
+				}
+
+				return array(
+					'success'        => true,
+					'email'          => $email,
+					'language'       => $language,
+					'attribute_name' => $attribute_name,
+					'list_id'        => $list_id,
+					'list_name'      => $list_name,
+					'message'        => 'Brevo language contact upserted.',
+				);
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => true,
 				),
 			),
 		)

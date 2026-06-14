@@ -8,7 +8,7 @@ Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, WonderPush localiz
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 1.0.5
+**Stable tag:** 1.0.6
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -107,7 +107,7 @@ If you are new to the stack, use this order:
 
 If you skip base-stack verification and start with add-ons immediately, troubleshooting gets harder than it needs to be.
 
-## Abilities (45)
+## Abilities (48)
 
 | Ability | Description |
 |---------|-------------|
@@ -131,6 +131,9 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 | `brevo/update-list` | Update list metadata |
 | `brevo/delete-list` | Delete a list |
 | `brevo/create-list` | Create a list |
+| `brevo/list-language-audiences` | Audit Brevo language attribute and language-specific lists |
+| `brevo/ensure-language-audiences` | Create missing Brevo language attribute and language-specific lists |
+| `brevo/upsert-language-contact` | Create or update a contact with language attribute and matching list |
 | `brevo/list-wordpress-forms` | List signup forms from the official Brevo WordPress plugin |
 | `brevo/get-wordpress-form` | Get a signup form and shortcode |
 | `brevo/create-wordpress-form` | Create a signup form |
@@ -213,6 +216,32 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 }
 ```
 
+### Ensure language-specific audiences
+
+```json
+{
+  "ability_name": "brevo/ensure-language-audiences",
+  "parameters": {
+    "folderId": 12,
+    "listPrefix": "Devenia",
+    "attributeName": "LANGUAGE"
+  }
+}
+```
+
+### Upsert a contact into the matching language list
+
+```json
+{
+  "ability_name": "brevo/upsert-language-contact",
+  "parameters": {
+    "email": "user@example.com",
+    "language": "nb",
+    "listPrefix": "Devenia"
+  }
+}
+```
+
 ### Call an endpoint without a typed wrapper
 
 ```json
@@ -249,6 +278,11 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 ```
 
 ## Changelog
+
+### 1.0.6
+- Added: Language-audience audit for Brevo contact language attributes and per-language lists
+- Added: Ability to ensure language-specific Brevo audiences from the site language registry
+- Added: Contact upsert ability that stores the normalized language attribute and adds the contact to the matching language list
 
 ### 1.0.5
 - Added: Runtime WonderPush localization abilities for prompt/widget text stored in WordPress options
