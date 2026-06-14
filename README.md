@@ -8,7 +8,7 @@ Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, WonderPush localiz
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 1.0.7
+**Stable tag:** 1.0.8
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -278,6 +278,9 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 ```
 
 ## Changelog
+
+### 1.0.8
+- Fixed: WonderPush localization now also patches Brevo push initialization and audits required subscription-bell text coverage
 
 ### 1.0.7
 - Fixed: Language-audience list lookup now respects Brevo contact-list pagination limits

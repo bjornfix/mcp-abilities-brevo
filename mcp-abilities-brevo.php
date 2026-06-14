@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Brevo
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-brevo
  * Description: Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, WonderPush localization, and send emails via Brevo API.
- * Version: 1.0.7
+ * Version: 1.0.8
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -601,6 +601,31 @@ function mcp_brevo_wonderpush_allowed_text_fields(): array {
 }
 
 /**
+ * Return text fields required for reliable localized WonderPush runtime UI.
+ *
+ * @return array<string, array<string>>
+ */
+function mcp_brevo_wonderpush_required_text_fields(): array {
+	return array(
+		'subscriptionBell' => array(
+			'dialogTitle',
+			'subscribeButtonTitle',
+			'unsubscribeButtonTitle',
+			'subscribeInviteText',
+			'alreadySubscribedText',
+			'alreadyUnsubscribedText',
+			'blockedText',
+			'subscribedText',
+			'unsubscribedText',
+			'advancedSettingsDescription',
+			'advancedSettingsFineprint',
+			'downloadDataButtonTitle',
+			'clearDataButtonTitle',
+		),
+	);
+}
+
+/**
  * Get the stored WonderPush localization configuration.
  *
  * @return array<string, mixed>
@@ -853,18 +878,33 @@ function mcp_brevo_wonderpush_enqueue_preinit_script(): void {
 		});
 		return target;
 	}
-	window.WonderPush = window.WonderPush || [];
-	var queue = window.WonderPush;
-	var originalPush = queue.push;
-	queue.push = function() {
-		for (var i = 0; i < arguments.length; i++) {
-			var command = arguments[i];
-			if (Array.isArray(command) && command[0] === 'init' && command[1]) {
-				command[1] = merge(command[1], config.options || {});
-			}
+	function patchQueue(queueName, initOptionsPath) {
+		window[queueName] = window[queueName] || [];
+		var queue = window[queueName];
+		var originalPush = queue.push;
+		if (queue._mcpBrevoWonderPushLocalized) {
+			return;
 		}
-		return originalPush.apply(this, arguments);
-	};
+		queue._mcpBrevoWonderPushLocalized = true;
+		queue.push = function() {
+			for (var i = 0; i < arguments.length; i++) {
+				var command = arguments[i];
+				if (!Array.isArray(command) || command[0] !== 'init' || !command[1]) {
+					continue;
+				}
+				var target = command[1];
+				for (var j = 0; j < initOptionsPath.length; j++) {
+					var key = initOptionsPath[j];
+					target[key] = target[key] && typeof target[key] === 'object' ? target[key] : {};
+					target = target[key];
+				}
+				merge(target, config.options || {});
+			}
+			return originalPush.apply(this, arguments);
+		};
+	}
+	patchQueue('WonderPush', []);
+	patchQueue('Brevo', ['push']);
 	if (config.locale) {
 		window.addEventListener('load', function() {
 			window.WonderPush = window.WonderPush || [];
@@ -879,7 +919,7 @@ function mcp_brevo_wonderpush_enqueue_preinit_script(): void {
 JS;
 	$script = str_replace( 'MCP_BREVO_WONDERPUSH_PAYLOAD', (string) wp_json_encode( $payload ), $script_template );
 
-	wp_register_script( 'mcp-brevo-wonderpush-localization', false, array(), '1.0.6', false );
+	wp_register_script( 'mcp-brevo-wonderpush-localization', false, array(), '1.0.8', false );
 	wp_enqueue_script( 'mcp-brevo-wonderpush-localization' );
 	wp_add_inline_script( 'mcp-brevo-wonderpush-localization', $script, 'before' );
 }
@@ -1244,7 +1284,7 @@ function mcp_register_brevo_abilities(): void {
 					'requireTexts' => array(
 						'type'        => 'boolean',
 						'default'     => true,
-						'description' => 'When true, flag configured languages that only have a locale and no text overrides.',
+						'description' => 'When true, flag languages missing required WonderPush runtime text fields.',
 					),
 				),
 				'additionalProperties' => false,
@@ -1259,6 +1299,7 @@ function mcp_register_brevo_abilities(): void {
 					'configured'         => array( 'type' => 'array' ),
 					'missing_languages'  => array( 'type' => 'array' ),
 					'languages_no_texts' => array( 'type' => 'array' ),
+					'missing_required_texts' => array( 'type' => 'object' ),
 					'message'            => array( 'type' => 'string' ),
 				),
 			),
@@ -1269,6 +1310,8 @@ function mcp_register_brevo_abilities(): void {
 				$require_texts   = isset( $input['requireTexts'] ) ? (bool) $input['requireTexts'] : true;
 				$missing         = array();
 				$languages_empty = array();
+				$missing_fields  = array();
+				$required_fields = mcp_brevo_wonderpush_required_text_fields();
 
 				foreach ( $site_languages as $language => $data ) {
 					if ( ! isset( $config['languages'][ $language ] ) ) {
@@ -1280,9 +1323,19 @@ function mcp_register_brevo_abilities(): void {
 					if ( $require_texts && empty( $texts ) ) {
 						$languages_empty[] = $language;
 					}
+					if ( $require_texts && is_array( $texts ) ) {
+						foreach ( $required_fields as $group => $keys ) {
+							$group_texts = isset( $texts[ $group ] ) && is_array( $texts[ $group ] ) ? $texts[ $group ] : array();
+							foreach ( $keys as $key ) {
+								if ( '' === trim( (string) ( $group_texts[ $key ] ?? '' ) ) ) {
+									$missing_fields[ $language ][] = $group . '.' . $key;
+								}
+							}
+						}
+					}
 				}
 
-				$passed = (bool) $config['enabled'] && empty( $missing ) && empty( $languages_empty );
+				$passed = (bool) $config['enabled'] && empty( $missing ) && empty( $languages_empty ) && empty( $missing_fields );
 
 				return array(
 					'success'            => true,
@@ -1292,6 +1345,7 @@ function mcp_register_brevo_abilities(): void {
 					'configured'         => $configured,
 					'missing_languages'  => $missing,
 					'languages_no_texts' => $languages_empty,
+					'missing_required_texts' => $missing_fields,
 					'message'            => $passed ? 'WonderPush localization coverage looks complete for known site languages.' : 'WonderPush localization coverage is incomplete.',
 				);
 			},
