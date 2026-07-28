@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Brevo
  * Plugin URI: https://devenia.com/plugins/mcp-abilities-brevo/
  * Description: Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, WonderPush localization, and send emails via Brevo API.
- * Version: 1.0.9
+ * Version: 1.0.10
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
@@ -70,7 +70,6 @@ function mcp_brevo_add_default_annotations( array $args, string $ability_name ):
 		'brevo/get-folder',
 		'brevo/list-webhooks',
 		'brevo/get-webhook',
-		'brevo/get-campaign',
 		'brevo/list-campaigns',
 	);
 
@@ -936,7 +935,7 @@ function mcp_brevo_wonderpush_enqueue_preinit_script(): void {
 JS;
 	$script = str_replace( 'MCP_BREVO_WONDERPUSH_PAYLOAD', (string) wp_json_encode( $payload ), $script_template );
 
-	wp_register_script( 'mcp-brevo-wonderpush-localization', false, array(), '1.0.9', false );
+	wp_register_script( 'mcp-brevo-wonderpush-localization', false, array(), '1.0.10', false );
 	wp_enqueue_script( 'mcp-brevo-wonderpush-localization' );
 	wp_add_inline_script( 'mcp-brevo-wonderpush-localization', $script, 'before' );
 }

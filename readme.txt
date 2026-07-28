@@ -3,7 +3,7 @@ Contributors: basicus
 Tags: mcp, brevo, sendinblue, email, wonderpush
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 1.0.9
+Stable tag: 1.0.10
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -26,6 +26,9 @@ Part of the MCP Expose Abilities ecosystem.
 4. Activate the plugin
 
 == Changelog ==
+
+= 1.0.10 =
+* Fixed: Remove a stale campaign-read inventory entry that was not a registered ability
 
 = 1.0.9 =
 * Changed: Use the current site title as the default language-list prefix

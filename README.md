@@ -2,13 +2,13 @@
 
 Manage Brevo contacts, lists, forms, localization, and email operations through authenticated WordPress abilities for MCP.
 
-[![Release 1.0.9](https://img.shields.io/badge/release-1.0.9-blue.svg)](https://downloads.devenia.com/mcp-abilities-brevo.zip)
+[![Release 1.0.10](https://img.shields.io/badge/release-1.0.10-blue.svg)](https://downloads.devenia.com/mcp-abilities-brevo.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 - **Tested up to:** WordPress 7.0
-- **Stable tag:** 1.0.9
+- **Stable tag:** 1.0.10
 - **License:** GPLv2 or later
 - **Tags:** mcp, brevo, sendinblue, email, wonderpush
 
@@ -159,7 +159,6 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 | `brevo/add-to-list` | Add contacts to a list |
 | `brevo/remove-from-list` | Remove contacts from a list |
 | `brevo/send-email` | Send transactional email |
-| `brevo/get-campaign` | Get an email campaign |
 | `brevo/list-campaigns` | List campaigns |
 | `brevo/send-campaign` | Send a campaign immediately |
 
@@ -287,6 +286,9 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 ```
 
 ## Changelog
+
+### 1.0.10
+- Remove a stale campaign-read inventory entry that was not a registered ability.
 
 ### 1.0.9
 - Use the current site title instead of a vendor name as the default language-list prefix.
