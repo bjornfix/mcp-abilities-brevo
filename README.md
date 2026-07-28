@@ -1,22 +1,22 @@
-# MCP Abilities - Brevo
+# MCP Abilities – Brevo
 
-Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, WonderPush localization, and send emails via Brevo API.
+Manage Brevo contacts, lists, forms, localization, and email operations through authenticated WordPress abilities for MCP.
 
-[![GitHub release](https://img.shields.io/github/v/release/bjornfix/mcp-abilities-brevo)](https://github.com/bjornfix/mcp-abilities-brevo/releases)
+[![Release 1.0.9](https://img.shields.io/badge/release-1.0.9-blue.svg)](https://downloads.devenia.com/mcp-abilities-brevo.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
-**Tested up to:** 7.0
-**Stable tag:** 1.0.8
-**License:** GPLv2 or later
-**License URI:** https://www.gnu.org/licenses/gpl-2.0.html
+- **Tested up to:** WordPress 7.0
+- **Stable tag:** 1.0.9
+- **License:** GPLv2 or later
+- **Tags:** mcp, brevo, sendinblue, email, wonderpush
 
 ## What It Does
 
 Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, WonderPush localization, and send emails via Brevo API.
 
-This plugin is part of the Devenia MCP abilities ecosystem. It gives an MCP-capable agent a focused, authenticated way to work with Brevo work inside WordPress through MCP.
+It gives an MCP-capable agent a focused, authenticated way to work with Brevo inside WordPress.
 
 **Example:** "Handle this WordPress maintenance task directly." - The agent can inspect the site, call the relevant ability, and return the result without making the human click through wp-admin for every step.
 
@@ -81,18 +81,20 @@ This is a good fit for:
 
 It is especially useful when the manual version is repetitive enough that important maintenance gets delayed.
 
+## Requirements
+
+- WordPress 6.9 or later and PHP 8.0 or later.
+- The WordPress Abilities API and an MCP exposure layer.
+- A Brevo account and API key for remote Brevo operations.
+- The official Brevo WordPress plugin for abilities that manage its stored signup forms.
+
 ## Documentation
 
-Start with the main plugin page and base stack documentation:
+Start with the plugin page and stable package:
 
+- [MCP Abilities – Brevo product page](https://devenia.com/plugins/mcp-abilities-brevo/)
+- [Stable plugin download](https://downloads.devenia.com/mcp-abilities-brevo.zip)
 - [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/)
-- [Plugin Page](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
-- [Getting Started](https://github.com/bjornfix/mcp-expose-abilities/wiki/Getting-Started)
-- [Install Order and Dependencies](https://github.com/bjornfix/mcp-expose-abilities/wiki/Install-Order-and-Dependencies)
-
-If you are using an AI agent, the simplest instruction is often just:
-
-- `Read https://github.com/bjornfix/mcp-expose-abilities and figure out the stack before making changes.`
 
 ## Start Here
 
@@ -161,6 +163,13 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 | `brevo/list-campaigns` | List campaigns |
 | `brevo/send-campaign` | Send a campaign immediately |
 
+## Safety and Ownership
+
+- Every registered Brevo ability requires the WordPress `manage_options` capability.
+- The generic API ability accepts Brevo v3 relative endpoints and rejects external absolute endpoints.
+- Brevo remains the owner of remote contact, audience, campaign, and delivery state.
+- The optional `mcp_brevo_site_languages` filter lets a multilingual integration add its own known languages without a private plugin dependency.
+
 ## Usage Examples
 
 ### List all contact lists
@@ -208,7 +217,7 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 {
   "ability_name": "brevo/ensure-wordpress-form",
   "parameters": {
-    "title": "Devenia Send waitlist",
+    "title": "Example newsletter",
     "listIds": [10],
     "includeName": true,
     "buttonLabel": "Join the waitlist"
@@ -223,7 +232,7 @@ If you skip base-stack verification and start with add-ons immediately, troubles
   "ability_name": "brevo/ensure-language-audiences",
   "parameters": {
     "folderId": 12,
-    "listPrefix": "Devenia",
+    "listPrefix": "Example",
     "attributeName": "LANGUAGE"
   }
 }
@@ -237,7 +246,7 @@ If you skip base-stack verification and start with add-ons immediately, troubles
   "parameters": {
     "email": "user@example.com",
     "language": "nb",
-    "listPrefix": "Devenia"
+    "listPrefix": "Example"
   }
 }
 ```
@@ -278,6 +287,11 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 ```
 
 ## Changelog
+
+### 1.0.9
+- Use the current site title instead of a vendor name as the default language-list prefix.
+- Let multilingual integrations add site languages through the public `mcp_brevo_site_languages` filter.
+- Align public plugin identity and links with the canonical Devenia distribution.
 
 ### 1.0.8
 - Fixed: WonderPush localization now also patches Brevo push initialization and audits required subscription-bell text coverage
@@ -328,13 +342,14 @@ GPL-2.0+
 
 ## Author
 
-[Devenia](https://devenia.com) - We've been doing SEO and web development since 1993.
+[basicus](https://profiles.wordpress.org/basicus/)
 
 ## Links
 
-- [Plugin Page](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
+- [Product page](https://devenia.com/plugins/mcp-abilities-brevo/)
+- [Stable download](https://downloads.devenia.com/mcp-abilities-brevo.zip)
 - [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/)
-- [GitHub Releases](https://github.com/bjornfix/mcp-abilities-brevo/releases)
+- [Optional public mirror](https://github.com/bjornfix/mcp-abilities-brevo)
 
 ## Star and Share
 

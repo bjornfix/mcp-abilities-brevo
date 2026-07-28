@@ -1,11 +1,11 @@
 <?php
 /**
  * Plugin Name: MCP Abilities - Brevo
- * Plugin URI: https://github.com/bjornfix/mcp-abilities-brevo
+ * Plugin URI: https://devenia.com/plugins/mcp-abilities-brevo/
  * Description: Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, WonderPush localization, and send emails via Brevo API.
- * Version: 1.0.8
- * Author: Devenia
- * Author URI: https://devenia.com
+ * Version: 1.0.9
+ * Author: basicus
+ * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
  * License URI: http://www.gnu.org/licenses/gpl-2.0.txt
  * Requires at least: 6.9
@@ -29,7 +29,7 @@ const MCP_BREVO_WONDERPUSH_LOCALIZATION_OPTION = 'mcp_brevo_wonderpush_localizat
 function mcp_brevo_check_dependencies(): bool {
 	if ( ! function_exists( 'wp_register_ability' ) ) {
 		add_action( 'admin_notices', function () {
-			echo '<div class="notice notice-error"><p><strong>MCP Abilities - Brevo</strong> requires the <a href="https://github.com/WordPress/abilities-api">Abilities API</a> plugin to be installed and activated.</p></div>';
+			echo '<div class="notice notice-error"><p><strong>MCP Abilities - Brevo</strong> requires the WordPress Abilities API.</p></div>';
 		} );
 		return false;
 	}
@@ -144,10 +144,21 @@ function mcp_brevo_sanitize_contact_attributes( array $attributes ): array {
 function mcp_brevo_language_list_name( string $language, string $list_prefix ): string {
 	$list_prefix = sanitize_text_field( trim( $list_prefix ) );
 	if ( '' === $list_prefix ) {
-		$list_prefix = 'Devenia';
+		$list_prefix = mcp_brevo_default_list_prefix();
 	}
 
 	return $list_prefix . ' ' . strtoupper( mcp_brevo_wonderpush_normalize_language( $language ) );
+}
+
+/**
+ * Return a vendor-neutral default prefix based on the current site title.
+ *
+ * @return string
+ */
+function mcp_brevo_default_list_prefix(): string {
+	$site_title = sanitize_text_field( trim( (string) get_bloginfo( 'name' ) ) );
+
+	return '' !== $site_title ? $site_title : 'WordPress';
 }
 
 /**
@@ -750,7 +761,7 @@ function mcp_brevo_wonderpush_texts_schema(): array {
 }
 
 /**
- * Infer known site languages from Devenia translation metadata when present.
+ * Return the current site language plus languages supplied through the public filter.
  *
  * @return array<string, array<string, string>>
  */
@@ -766,10 +777,16 @@ function mcp_brevo_wonderpush_get_site_languages(): array {
 		);
 	}
 
-	$translation_languages = get_option( 'devenia_ai_translations_languages', array() );
-	if ( is_array( $translation_languages ) ) {
-		foreach ( $translation_languages as $raw_code => $data ) {
+	$filtered_languages = apply_filters( 'mcp_brevo_site_languages', $languages );
+	if ( is_array( $filtered_languages ) ) {
+		foreach ( $filtered_languages as $raw_code => $data ) {
 			$lang_code = mcp_brevo_wonderpush_normalize_language( (string) $raw_code );
+			if ( is_string( $data ) ) {
+				$lang_code = mcp_brevo_wonderpush_normalize_language( $data );
+			}
+			if ( is_array( $data ) && isset( $data['language'] ) ) {
+				$lang_code = mcp_brevo_wonderpush_normalize_language( (string) $data['language'] );
+			}
 			if ( '' === $lang_code ) {
 				continue;
 			}
@@ -782,7 +799,7 @@ function mcp_brevo_wonderpush_get_site_languages(): array {
 			$languages[ $lang_code ] = array(
 				'language' => $lang_code,
 				'locale'   => $lang_locale,
-				'source'   => 'devenia_ai_translations_languages',
+				'source'   => is_array( $data ) ? sanitize_key( (string) ( $data['source'] ?? 'filter' ) ) : 'filter',
 			);
 		}
 	}
@@ -919,7 +936,7 @@ function mcp_brevo_wonderpush_enqueue_preinit_script(): void {
 JS;
 	$script = str_replace( 'MCP_BREVO_WONDERPUSH_PAYLOAD', (string) wp_json_encode( $payload ), $script_template );
 
-	wp_register_script( 'mcp-brevo-wonderpush-localization', false, array(), '1.0.8', false );
+	wp_register_script( 'mcp-brevo-wonderpush-localization', false, array(), '1.0.9', false );
 	wp_enqueue_script( 'mcp-brevo-wonderpush-localization' );
 	wp_add_inline_script( 'mcp-brevo-wonderpush-localization', $script, 'before' );
 }
@@ -1989,8 +2006,7 @@ function mcp_register_brevo_abilities(): void {
 					),
 					'listPrefix'    => array(
 						'type'        => 'string',
-						'default'     => 'Devenia',
-						'description' => 'Prefix for language list names, e.g. Devenia creates Devenia NB.',
+						'description' => 'Prefix for language list names. Defaults to the current WordPress site title.',
 					),
 					'attributeName' => array(
 						'type'        => 'string',
@@ -2015,7 +2031,7 @@ function mcp_register_brevo_abilities(): void {
 			),
 			'execute_callback'    => function ( array $input = array() ): array {
 				$attribute_name = mcp_brevo_sanitize_attribute_name( (string) ( $input['attributeName'] ?? 'LANGUAGE' ) );
-				$list_prefix    = sanitize_text_field( (string) ( $input['listPrefix'] ?? 'Devenia' ) );
+				$list_prefix    = sanitize_text_field( (string) ( $input['listPrefix'] ?? mcp_brevo_default_list_prefix() ) );
 				$languages      = mcp_brevo_get_requested_languages( (array) ( $input['languages'] ?? array() ) );
 
 				$attribute = mcp_brevo_get_language_attribute_status( $attribute_name );
@@ -2079,8 +2095,7 @@ function mcp_register_brevo_abilities(): void {
 					),
 					'listPrefix'    => array(
 						'type'        => 'string',
-						'default'     => 'Devenia',
-						'description' => 'Prefix for language list names, e.g. Devenia creates Devenia NB.',
+						'description' => 'Prefix for language list names. Defaults to the current WordPress site title.',
 					),
 					'attributeName' => array(
 						'type'        => 'string',
@@ -2109,7 +2124,7 @@ function mcp_register_brevo_abilities(): void {
 				$folder_id      = (int) ( $input['folderId'] ?? 0 );
 				$dry_run        = ! empty( $input['dryRun'] );
 				$attribute_name = mcp_brevo_sanitize_attribute_name( (string) ( $input['attributeName'] ?? 'LANGUAGE' ) );
-				$list_prefix    = sanitize_text_field( (string) ( $input['listPrefix'] ?? 'Devenia' ) );
+				$list_prefix    = sanitize_text_field( (string) ( $input['listPrefix'] ?? mcp_brevo_default_list_prefix() ) );
 				$languages      = mcp_brevo_get_requested_languages( (array) ( $input['languages'] ?? array() ) );
 
 				if ( empty( $languages ) ) {
@@ -2186,8 +2201,7 @@ function mcp_register_brevo_abilities(): void {
 					),
 					'listPrefix'    => array(
 						'type'        => 'string',
-						'default'     => 'Devenia',
-						'description' => 'Prefix for language list names.',
+						'description' => 'Prefix for language list names. Defaults to the current WordPress site title.',
 					),
 					'attributeName' => array(
 						'type'        => 'string',
@@ -2221,7 +2235,7 @@ function mcp_register_brevo_abilities(): void {
 				}
 
 				$attribute_name = mcp_brevo_sanitize_attribute_name( (string) ( $input['attributeName'] ?? 'LANGUAGE' ) );
-				$list_prefix    = sanitize_text_field( (string) ( $input['listPrefix'] ?? 'Devenia' ) );
+				$list_prefix    = sanitize_text_field( (string) ( $input['listPrefix'] ?? mcp_brevo_default_list_prefix() ) );
 				$list_name      = mcp_brevo_language_list_name( $language, $list_prefix );
 				$list_id        = (int) ( $input['listId'] ?? 0 );
 
