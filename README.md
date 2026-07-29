@@ -2,13 +2,13 @@
 
 Manage Brevo contacts, lists, forms, localization, and email operations through authenticated WordPress abilities for MCP.
 
-[![Release 1.0.10](https://img.shields.io/badge/release-1.0.10-blue.svg)](https://downloads.devenia.com/mcp-abilities-brevo.zip)
+[![Release 1.0.11](https://img.shields.io/badge/release-1.0.11-blue.svg)](https://downloads.devenia.com/mcp-abilities-brevo.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 - **Tested up to:** WordPress 7.0
-- **Stable tag:** 1.0.10
+- **Stable tag:** 1.0.11
 - **License:** GPLv2 or later
 - **Tags:** mcp, brevo, sendinblue, email, wonderpush
 
@@ -244,7 +244,7 @@ If you skip base-stack verification and start with add-ons immediately, troubles
   "ability_name": "brevo/upsert-language-contact",
   "parameters": {
     "email": "user@example.com",
-    "language": "nb",
+    "language": "fr",
     "listPrefix": "Example"
   }
 }
@@ -268,17 +268,17 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 {
   "ability_name": "brevo/wonderpush-update-localization",
   "parameters": {
-    "language": "nb",
-    "locale": "nb-NO",
+    "language": "fr",
+    "locale": "fr-FR",
     "texts": {
       "subscriptionBell": {
-        "dialogTitle": "Administrer varsler",
-        "subscribeButtonTitle": "Abonner",
-        "advancedSettingsDescription": "Dine personlige varslingsdata:"
+        "dialogTitle": "Manage notifications",
+        "subscribeButtonTitle": "Subscribe",
+        "advancedSettingsDescription": "Your personal notification data:"
       },
       "subscriptionDialog": {
-        "positiveButton": "Abonner",
-        "negativeButton": "Senere"
+        "positiveButton": "Subscribe",
+        "negativeButton": "Later"
       }
     }
   }
@@ -286,6 +286,9 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 ```
 
 ## Changelog
+
+### 1.0.11
+- Replaced language-specific public examples and validation guidance with neutral examples.
 
 ### 1.0.10
 - Remove a stale campaign-read inventory entry that was not a registered ability.

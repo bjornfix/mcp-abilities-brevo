@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Brevo
  * Plugin URI: https://devenia.com/plugins/mcp-abilities-brevo/
  * Description: Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, WonderPush localization, and send emails via Brevo API.
- * Version: 1.0.10
+ * Version: 1.0.11
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
@@ -935,7 +935,7 @@ function mcp_brevo_wonderpush_enqueue_preinit_script(): void {
 JS;
 	$script = str_replace( 'MCP_BREVO_WONDERPUSH_PAYLOAD', (string) wp_json_encode( $payload ), $script_template );
 
-	wp_register_script( 'mcp-brevo-wonderpush-localization', false, array(), '1.0.10', false );
+	wp_register_script( 'mcp-brevo-wonderpush-localization', false, array(), '1.0.11', false );
 	wp_enqueue_script( 'mcp-brevo-wonderpush-localization' );
 	wp_add_inline_script( 'mcp-brevo-wonderpush-localization', $script, 'before' );
 }
@@ -1211,7 +1211,7 @@ function mcp_register_brevo_abilities(): void {
 					),
 					'locale'   => array(
 						'type'        => 'string',
-						'description' => 'Optional locale for WonderPush setLocale, such as nb-NO or de-DE.',
+						'description' => 'Optional locale for WonderPush setLocale, such as fr-FR or de-DE.',
 					),
 					'enabled'  => array(
 						'type'        => 'boolean',
@@ -1245,7 +1245,7 @@ function mcp_register_brevo_abilities(): void {
 				$existing = isset( $config['languages'][ $language ] ) && is_array( $config['languages'][ $language ] ) ? $config['languages'][ $language ] : array();
 				$locale   = isset( $input['locale'] ) ? mcp_brevo_wonderpush_normalize_locale( (string) $input['locale'] ) : (string) ( $existing['locale'] ?? '' );
 				if ( isset( $input['locale'] ) && '' === $locale ) {
-					return array( 'success' => false, 'message' => 'Locale must look like nb, nb-NO, or de-DE.' );
+				return array( 'success' => false, 'message' => 'Locale must look like fr, fr-FR, or de-DE.' );
 				}
 
 				$texts = isset( $existing['texts'] ) && is_array( $existing['texts'] ) ? mcp_brevo_wonderpush_sanitize_texts( $existing['texts'] ) : array();
