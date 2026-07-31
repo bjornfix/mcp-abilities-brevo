@@ -100,14 +100,21 @@ Start with the plugin page and stable package:
 
 If you are new to the stack, use this order:
 
-1. Install **Abilities API**.
-2. Install **MCP Adapter**.
-3. Install **MCP Expose Abilities**.
+1. Use **WordPress 6.9 or newer**, where the Abilities API provides the ability registry, schemas, and permission callbacks.
+2. Install the **MCP Adapter** to expose registered WordPress abilities through MCP.
+3. Install **MCP Expose Abilities** for the Devenia exposure and operating surface.
 4. Install **MCP Abilities - Brevo**.
-5. Confirm the new abilities appear in discovery.
-6. Give the agent a clear task that uses this add-on.
+5. Install and configure the official Brevo plugin when you need its stored API key or WordPress form operations.
+6. Confirm the new abilities appear in discovery before changing audience or delivery state.
 
 If you skip base-stack verification and start with add-ons immediately, troubleshooting gets harder than it needs to be.
+
+## Dependencies
+
+- [WordPress Abilities API](https://developer.wordpress.org/apis/abilities-api/) — required through WordPress 6.9 or newer; it registers, describes, validates, and permission-checks the abilities exposed by this add-on.
+- [WordPress MCP Adapter](https://developer.wordpress.org/news/2026/02/from-abilities-to-ai-agents-introducing-the-wordpress-mcp-adapter/) — required for MCP access; it turns registered WordPress abilities into MCP tools that an authenticated client can discover and call.
+- [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) — required for the Devenia stack; it provides the established exposure, authentication, and operating surface used with these add-ons.
+- [Brevo for WordPress](https://wordpress.org/plugins/mailin/) — required for the add-on's WordPress form operations and the standard place it reads the Brevo API key used by remote account, audience, delivery, and webhook operations.
 
 ## Abilities (48)
 
