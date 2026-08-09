@@ -112,8 +112,7 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 ## Dependencies
 
 - [WordPress Abilities API](https://developer.wordpress.org/apis/abilities-api/) — required through WordPress 6.9 or newer; it registers, describes, validates, and permission-checks the abilities exposed by this add-on.
-- [WordPress MCP Adapter](https://developer.wordpress.org/news/2026/02/from-abilities-to-ai-agents-introducing-the-wordpress-mcp-adapter/) — required for MCP access; it turns registered WordPress abilities into MCP tools that an authenticated client can discover and call.
-- [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) — required for the Devenia stack; it provides the established exposure, authentication, and operating surface used with these add-ons.
+- [WordPress MCP Adapter](https://github.com/WordPress/mcp-adapter/) — required for MCP access; it turns registered WordPress abilities into MCP tools that an authenticated client can discover and call.
 - [Brevo for WordPress](https://wordpress.org/plugins/mailin/) — required for the add-on's WordPress form operations and the standard place it reads the Brevo API key used by remote account, audience, delivery, and webhook operations.
 
 ## Abilities (48)
