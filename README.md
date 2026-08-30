@@ -115,12 +115,14 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 - [WordPress MCP Adapter](https://github.com/WordPress/mcp-adapter/) — required for MCP access; it turns registered WordPress abilities into MCP tools that an authenticated client can discover and call.
 - [Brevo for WordPress](https://wordpress.org/plugins/mailin/) — required for the add-on's WordPress form operations and the standard place it reads the Brevo API key used by remote account, audience, delivery, and webhook operations.
 
-## Abilities (48)
+## Abilities (50)
 
 | Ability | Description |
 |---------|-------------|
 | `brevo/api-request` | Call any Brevo v3 endpoint with the configured API key |
 | `brevo/get-account` | Get Brevo account and plan details |
+| `brevo/wonderpush-get-subscription-bell` | Read the managed global WonderPush subscription-bell settings |
+| `brevo/wonderpush-update-subscription-bell` | Update the bell position or hide it after subscription |
 | `brevo/wonderpush-get-localization` | Read stored WonderPush prompt/widget localization |
 | `brevo/wonderpush-update-localization` | Create or update runtime WonderPush localization for one language |
 | `brevo/wonderpush-audit-localization` | Audit WonderPush localization coverage against known site languages |
@@ -291,7 +293,23 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 }
 ```
 
+### Configure the WonderPush subscription bell
+
+```json
+{
+  "ability_name": "brevo/wonderpush-update-subscription-bell",
+  "parameters": {
+    "position": "right",
+    "hideWhenSubscribed": true
+  }
+}
+```
+
 ## Changelog
+
+### Unreleased
+- Added typed abilities for the native WonderPush subscription-bell position and subscribed-user visibility.
+- Merged global bell settings through the existing Brevo/WonderPush pre-init adapter without page CSS.
 
 ### 1.0.11
 - Replaced language-specific public examples and validation guidance with neutral examples.

@@ -649,15 +649,19 @@ function mcp_brevo_wonderpush_get_localization_config(): array {
 	$config = wp_parse_args(
 		$config,
 		array(
-			'enabled'    => true,
-			'languages'  => array(),
-			'updated_at' => '',
+			'enabled'           => true,
+			'languages'         => array(),
+			'subscription_bell' => array(),
+			'updated_at'        => '',
 		)
 	);
 
 	if ( ! is_array( $config['languages'] ) ) {
 		$config['languages'] = array();
 	}
+	$config['subscription_bell'] = is_array( $config['subscription_bell'] )
+		? mcp_brevo_wonderpush_sanitize_subscription_bell_settings( $config['subscription_bell'] )
+		: array();
 
 	return $config;
 }
@@ -729,6 +733,52 @@ function mcp_brevo_wonderpush_sanitize_texts( array $texts ): array {
 	}
 
 	return $output;
+}
+
+/**
+ * Sanitize the global WonderPush subscription-bell settings managed here.
+ *
+ * @param array $settings Raw subscription-bell settings.
+ * @return array<string, bool|string>
+ */
+function mcp_brevo_wonderpush_sanitize_subscription_bell_settings( array $settings ): array {
+	$output = array();
+
+	if ( array_key_exists( 'position', $settings ) ) {
+		$position = sanitize_key( (string) $settings['position'] );
+		if ( in_array( $position, array( 'left', 'right' ), true ) ) {
+			$output['position'] = $position;
+		}
+	}
+
+	if ( array_key_exists( 'hideWhenSubscribed', $settings ) ) {
+		$output['hideWhenSubscribed'] = (bool) $settings['hideWhenSubscribed'];
+	}
+
+	return $output;
+}
+
+/**
+ * Build the MCP schema for global WonderPush subscription-bell settings.
+ *
+ * @return array<string, mixed>
+ */
+function mcp_brevo_wonderpush_subscription_bell_settings_schema(): array {
+	return array(
+		'type'                 => 'object',
+		'properties'           => array(
+			'position'           => array(
+				'type'        => 'string',
+				'enum'        => array( 'left', 'right' ),
+				'description' => 'Place the fixed bell at the lower-left or lower-right edge.',
+			),
+			'hideWhenSubscribed' => array(
+				'type'        => 'boolean',
+				'description' => 'Hide the bell after the visitor has subscribed.',
+			),
+		),
+		'additionalProperties' => false,
+	);
 }
 
 /**
@@ -834,11 +884,13 @@ function mcp_brevo_wonderpush_get_current_init_options(): array {
 	$config   = mcp_brevo_wonderpush_get_localization_config();
 	$language = mcp_brevo_wonderpush_detect_current_language();
 
-	if ( empty( $config['enabled'] ) || empty( $config['languages'][ $language ] ) || ! is_array( $config['languages'][ $language ] ) ) {
+	if ( empty( $config['enabled'] ) ) {
 		return array();
 	}
 
-	$language_config = $config['languages'][ $language ];
+	$language_config = isset( $config['languages'][ $language ] ) && is_array( $config['languages'][ $language ] )
+		? $config['languages'][ $language ]
+		: array();
 	$texts           = isset( $language_config['texts'] ) && is_array( $language_config['texts'] ) ? mcp_brevo_wonderpush_sanitize_texts( $language_config['texts'] ) : array();
 	$locale          = mcp_brevo_wonderpush_normalize_locale( (string) ( $language_config['locale'] ?? '' ) );
 	$options         = array();
@@ -847,6 +899,11 @@ function mcp_brevo_wonderpush_get_current_init_options(): array {
 		if ( ! empty( $group_texts ) ) {
 			$options[ $group ] = $group_texts;
 		}
+	}
+
+	$subscription_bell = mcp_brevo_wonderpush_sanitize_subscription_bell_settings( (array) $config['subscription_bell'] );
+	if ( ! empty( $subscription_bell ) ) {
+		$options['subscriptionBell'] = array_merge( $options['subscriptionBell'] ?? array(), $subscription_bell );
 	}
 
 	if ( '' !== $locale ) {
@@ -1137,8 +1194,97 @@ function mcp_register_brevo_abilities(): void {
 	);
 
 	// =========================================================================
-	// WONDERPUSH - Runtime localization for official Brevo/WonderPush frontend UI.
+	// WONDERPUSH - Runtime settings for official Brevo/WonderPush frontend UI.
 	// =========================================================================
+	wp_register_ability(
+		'brevo/wonderpush-get-subscription-bell',
+		array(
+			'label'               => 'Get WonderPush Subscription Bell',
+			'description'         => 'Read the managed global WonderPush subscription-bell position and subscribed-user visibility.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'           => array( 'type' => 'boolean' ),
+					'subscription_bell' => mcp_brevo_wonderpush_subscription_bell_settings_schema(),
+					'updated_at'        => array( 'type' => 'string' ),
+					'message'           => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function (): array {
+				$config = mcp_brevo_wonderpush_get_localization_config();
+
+				return array(
+					'success'           => true,
+					'subscription_bell' => $config['subscription_bell'],
+					'updated_at'        => (string) $config['updated_at'],
+					'message'           => 'WonderPush subscription-bell settings retrieved.',
+				);
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	wp_register_ability(
+		'brevo/wonderpush-update-subscription-bell',
+		array(
+			'label'               => 'Update WonderPush Subscription Bell',
+			'description'         => 'Update the managed global WonderPush subscription-bell position or hide it after a visitor subscribes.',
+			'category'            => 'site',
+			'input_schema'        => mcp_brevo_wonderpush_subscription_bell_settings_schema(),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'           => array( 'type' => 'boolean' ),
+					'subscription_bell' => mcp_brevo_wonderpush_subscription_bell_settings_schema(),
+					'updated_at'        => array( 'type' => 'string' ),
+					'message'           => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( array $input = array() ): array {
+				$updates = mcp_brevo_wonderpush_sanitize_subscription_bell_settings( $input );
+				if ( empty( $updates ) ) {
+					return array(
+						'success' => false,
+						'message' => 'Provide position or hideWhenSubscribed.',
+					);
+				}
+
+				$config                       = mcp_brevo_wonderpush_get_localization_config();
+				$config['subscription_bell'] = array_merge( $config['subscription_bell'], $updates );
+				$config['updated_at']        = current_time( 'mysql', true );
+				update_option( MCP_BREVO_WONDERPUSH_LOCALIZATION_OPTION, $config, false );
+
+				return array(
+					'success'           => true,
+					'subscription_bell' => $config['subscription_bell'],
+					'updated_at'        => (string) $config['updated_at'],
+					'message'           => 'WonderPush subscription-bell settings updated.',
+				);
+			},
+			'permission_callback' => 'mcp_brevo_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
 	wp_register_ability(
 		'brevo/wonderpush-get-localization',
 		array(
