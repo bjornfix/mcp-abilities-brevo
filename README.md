@@ -2,13 +2,13 @@
 
 Manage Brevo contacts, lists, forms, localization, and email operations through authenticated WordPress abilities for MCP.
 
-[![Release 1.0.11](https://img.shields.io/badge/release-1.0.11-blue.svg)](https://downloads.devenia.com/mcp-abilities-brevo.zip)
+[![Release 1.0.12](https://img.shields.io/badge/release-1.0.12-blue.svg)](https://downloads.devenia.com/mcp-abilities-brevo.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
-- **Tested up to:** WordPress 7.0
-- **Stable tag:** 1.0.11
+- **Tested up to:** WordPress 7.1
+- **Stable tag:** 1.0.12
 - **License:** GPLv2 or later
 - **Tags:** mcp, brevo, sendinblue, email, wonderpush
 
@@ -17,6 +17,8 @@ Manage Brevo contacts, lists, forms, localization, and email operations through 
 Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, WonderPush localization, and send emails via Brevo API.
 
 It gives an MCP-capable agent a focused, authenticated way to work with Brevo inside WordPress.
+
+When Static Publication serves the site, the add-on includes the worker and frame files that WonderPush needs for push subscriptions.
 
 **Example:** "Handle this WordPress maintenance task directly." - The agent can inspect the site, call the relevant ability, and return the result without making the human click through wp-admin for every step.
 
@@ -307,9 +309,10 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 
 ## Changelog
 
-### Unreleased
+### 1.0.12
 - Added typed abilities for the native WonderPush subscription-bell position and subscribed-user visibility.
-- Merged global bell settings through the existing Brevo/WonderPush pre-init adapter without page CSS.
+- Added global bell positioning and visibility settings.
+- Included the required WonderPush worker and frame files when Static Publication serves the site.
 
 ### 1.0.11
 - Replaced language-specific public examples and validation guidance with neutral examples.

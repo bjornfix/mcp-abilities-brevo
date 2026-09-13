@@ -7,8 +7,18 @@ declare( strict_types=1 );
 
 define( 'ABSPATH', __DIR__ . '/' );
 
+final class SIB_Manager {}
+
 function add_action(): void {}
-function add_filter(): void {}
+function add_filter( string $hook_name, callable|string $callback ): void {
+	$GLOBALS['mcp_brevo_test_filters'][ $hook_name ][] = $callback;
+}
+function plugins_url( string $path = '' ): string {
+	return 'http://wordpress.example/wp-content/plugins/' . ltrim( $path, '/' );
+}
+function home_url( string $path = '' ): string {
+	return 'https://wordpress.example/' . ltrim( $path, '/' );
+}
 function wp_register_ability( string $name, array $args ): void {
 	$GLOBALS['mcp_brevo_test_abilities'][ $name ] = $args;
 }
@@ -47,6 +57,18 @@ function mcp_brevo_test_assert( bool $condition, string $message ): void {
 }
 
 mcp_register_brevo_abilities();
+$runtime_asset_filter = $GLOBALS['mcp_brevo_test_filters']['static_publication_initial_asset_urls'][0] ?? null;
+mcp_brevo_test_assert( is_callable( $runtime_asset_filter ), 'The Brevo Adapter did not register its Static Publication Interface.' );
+$runtime_asset_urls = $runtime_asset_filter( array( 'https://wordpress.example/existing.js' ) );
+mcp_brevo_test_assert(
+	array(
+		'https://wordpress.example/existing.js',
+		'https://wordpress.example/wp-content/plugins/mailin/wonderpush-worker-loader.min.js',
+		'https://wordpress.example/wp-content/plugins/mailin/wonderpush.min.html',
+		'https://wordpress.example/wp-content/plugins/mailin/brevo-frame.html',
+	) === $runtime_asset_urls,
+	'The Brevo Adapter did not declare the exact Mailin worker and frame files.'
+);
 mcp_brevo_test_assert(
 	isset( $GLOBALS['mcp_brevo_test_abilities']['brevo/wonderpush-get-subscription-bell'] ),
 	'The read-only subscription-bell ability should be registered.'

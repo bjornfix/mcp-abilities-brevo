@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Brevo
  * Plugin URI: https://devenia.com/plugins/mcp-abilities-brevo/
  * Description: Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, WonderPush localization, and send emails via Brevo API.
- * Version: 1.0.11
+ * Version: 1.0.12
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
@@ -997,6 +997,30 @@ JS;
 	wp_add_inline_script( 'mcp-brevo-wonderpush-localization', $script, 'before' );
 }
 add_action( 'wp_enqueue_scripts', 'mcp_brevo_wonderpush_enqueue_preinit_script', 0 );
+
+/**
+ * Declare Mailin runtime files that its inline WonderPush configuration loads in the browser.
+ *
+ * @param array<int, string> $urls Existing same-origin runtime asset URLs.
+ * @return array<int, string>
+ */
+function mcp_brevo_wonderpush_static_asset_urls( array $urls ): array {
+	if ( ! class_exists( 'SIB_Manager' ) ) {
+		return $urls;
+	}
+
+	foreach ( array( 'wonderpush-worker-loader.min.js', 'wonderpush.min.html', 'brevo-frame.html' ) as $filename ) {
+		$asset_path = wp_parse_url( plugins_url( 'mailin/' . $filename ), PHP_URL_PATH );
+		if ( ! is_string( $asset_path ) || '' === $asset_path ) {
+			continue;
+		}
+
+		$urls[] = home_url( '/' . ltrim( $asset_path, '/' ) );
+	}
+
+	return array_values( array_unique( $urls ) );
+}
+add_filter( 'static_publication_initial_asset_urls', 'mcp_brevo_wonderpush_static_asset_urls' );
 
 /**
  * Sanitize Brevo form markup while preserving normal form fields.

@@ -3,7 +3,7 @@ Contributors: basicus
 Tags: mcp, brevo, sendinblue, email, wonderpush
 Requires at least: 6.9
 Tested up to: 7.1
-Stable tag: 1.0.11
+Stable tag: 1.0.12
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -20,12 +20,16 @@ Part of the MCP Expose Abilities ecosystem.
 
 == Installation ==
 
-1. Install the required plugins (Abilities API, MCP Adapter, Brevo)
+1. Use WordPress 6.9 or later and install MCP Adapter and Brevo for WordPress.
 2. Configure the Brevo plugin with your API key
 3. Download and install this plugin
 4. Activate the plugin
 
 == Changelog ==
+
+= 1.0.12 =
+* Added abilities to read and update WonderPush subscription-bell position and visibility after subscription.
+* Included the required WonderPush worker and frame files when Static Publication serves the site.
 
 = 1.0.11 =
 * Replaced language-specific public examples and validation guidance with neutral examples.
