@@ -2,13 +2,13 @@
 
 Manage Brevo contacts, lists, forms, localization, and email operations through authenticated WordPress abilities for MCP.
 
-[![Release 1.0.12](https://img.shields.io/badge/release-1.0.12-blue.svg)](https://downloads.devenia.com/mcp-abilities-brevo.zip)
+[![Release 1.0.13](https://img.shields.io/badge/release-1.0.13-blue.svg)](https://downloads.devenia.com/mcp-abilities-brevo.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 - **Tested up to:** WordPress 7.1
-- **Stable tag:** 1.0.12
+- **Stable tag:** 1.0.13
 - **License:** GPLv2 or later
 - **Tags:** mcp, brevo, sendinblue, email, wonderpush
 
@@ -309,6 +309,11 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 
 ## Changelog
 
+
+### 1.0.13
+
+Add one dismissible Plugins-screen reminder when Devenia MCP Updater is missing or inactive, with persistent install or activate links. Automatic updates remain your choice in WordPress.
+
 ### 1.0.12
 - Added typed abilities for the native WonderPush subscription-bell position and subscribed-user visibility.
 - Added global bell positioning and visibility settings.
@@ -394,3 +399,8 @@ If this plugin saves you time or makes WordPress maintenance easier to verify, p
 Why do it?
 
 Because agent-friendly open WordPress tooling helps more of the boring but important work get done.
+
+
+## Update notifications
+
+For update notifications in WordPress, install [Devenia MCP Updater](https://downloads.devenia.com/devenia-mcp-updater.zip). The updater is optional. You choose which plugins update automatically through WordPress.

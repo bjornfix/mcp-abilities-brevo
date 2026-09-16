@@ -3,7 +3,7 @@ Contributors: basicus
 Tags: mcp, brevo, sendinblue, email, wonderpush
 Requires at least: 6.9
 Tested up to: 7.1
-Stable tag: 1.0.12
+Stable tag: 1.0.13
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -20,12 +20,17 @@ Part of the MCP Expose Abilities ecosystem.
 
 == Installation ==
 
+For update notifications in WordPress, install [Devenia MCP Updater](https://downloads.devenia.com/devenia-mcp-updater.zip). The updater is optional. You choose which plugins update automatically through WordPress.
+
 1. Use WordPress 6.9 or later and install MCP Adapter and Brevo for WordPress.
 2. Configure the Brevo plugin with your API key
 3. Download and install this plugin
 4. Activate the plugin
 
 == Changelog ==
+
+= 1.0.13 =
+* Add one dismissible Plugins-screen reminder when Devenia MCP Updater is missing or inactive, with persistent install or activate links. Automatic updates remain your choice in WordPress.
 
 = 1.0.12 =
 * Added abilities to read and update WonderPush subscription-bell position and visibility after subscription.
