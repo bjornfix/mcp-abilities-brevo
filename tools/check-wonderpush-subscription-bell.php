@@ -50,7 +50,7 @@ function is_admin(): bool { return false; }
 function wp_doing_ajax(): bool { return false; }
 function wp_is_json_request(): bool { return false; }
 function wp_enqueue_style( string $handle, string $src, array $deps, string $ver, string $media ): void {
-	$GLOBALS['mcp_brevo_test_styles'][ $handle ] = $media;
+	$GLOBALS['mcp_brevo_test_styles'][ $handle ] = array( 'media' => $media, 'version' => $ver );
 }
 function wp_register_script(): void {}
 function wp_enqueue_script(): void {}
@@ -144,7 +144,10 @@ $query = '(width < 48rem)';
 $GLOBALS['mcp_brevo_test_options'][ MCP_BREVO_WONDERPUSH_LOCALIZATION_OPTION ]['subscription_bell']['inlineMediaQuery'] = $query;
 mcp_brevo_test_assert( $options === mcp_brevo_wonderpush_get_current_init_options(), 'A local placement must not modify the original WonderPush init options.' );
 mcp_brevo_wonderpush_enqueue_preinit_script();
-mcp_brevo_test_assert( $query === ( $GLOBALS['mcp_brevo_test_styles'][ $style ] ?? '' ), 'The asset should use exactly the supplied media query.' );
+$registered = $GLOBALS['mcp_brevo_test_styles'][ $style ] ?? array();
+mcp_brevo_test_assert( $query === ( $registered['media'] ?? '' ), 'The asset should use exactly the supplied media query.' );
+$stylesheet_contents = file_get_contents( dirname( __DIR__ ) . '/includes/wonderpush-inline-bell.css' );
+mcp_brevo_test_assert( hash( 'sha256', $stylesheet_contents ) === ( $registered['version'] ?? '' ), 'The cache version should match the stylesheet contents.' );
 
 unset( $GLOBALS['mcp_brevo_test_styles'][ $style ] );
 $GLOBALS['mcp_brevo_test_options'][ MCP_BREVO_WONDERPUSH_LOCALIZATION_OPTION ]['subscription_bell']['inlineMediaQuery'] = '';
