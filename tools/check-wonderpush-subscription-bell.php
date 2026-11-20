@@ -46,6 +46,18 @@ function apply_filters( string $hook_name, mixed $value ): mixed {
 function wp_parse_url( string $url, int $component = -1 ): mixed {
 	return parse_url( $url, $component );
 }
+function is_admin(): bool { return false; }
+function wp_doing_ajax(): bool { return false; }
+function wp_is_json_request(): bool { return false; }
+function wp_enqueue_style( string $handle, string $src, array $deps, string $ver, string $media ): void {
+	$GLOBALS['mcp_brevo_test_styles'][ $handle ] = $media;
+}
+function wp_register_script(): void {}
+function wp_enqueue_script(): void {}
+function wp_add_inline_script(): void {}
+function wp_json_encode( mixed $data, int $flags = 0 ): string {
+	return json_encode( $data, $flags | JSON_THROW_ON_ERROR );
+}
 
 require dirname( __DIR__ ) . '/mcp-abilities-brevo.php';
 
@@ -124,5 +136,19 @@ $GLOBALS['mcp_brevo_test_options'][ MCP_BREVO_WONDERPUSH_LOCALIZATION_OPTION ]['
 $options = mcp_brevo_wonderpush_get_current_init_options();
 mcp_brevo_test_assert( 'right' === $options['subscriptionBell']['position'], 'Global bell settings should apply without a language-specific text record.' );
 mcp_brevo_test_assert( ! isset( $options['locale'] ), 'No locale should be invented without a language-specific record.' );
+
+$style = 'mcp-brevo-wonderpush-inline-bell';
+mcp_brevo_wonderpush_enqueue_preinit_script();
+mcp_brevo_test_assert( ! isset( $GLOBALS['mcp_brevo_test_styles'][ $style ] ), 'An existing configuration should keep the bell floating.' );
+$query = '(width < 48rem)';
+$GLOBALS['mcp_brevo_test_options'][ MCP_BREVO_WONDERPUSH_LOCALIZATION_OPTION ]['subscription_bell']['inlineMediaQuery'] = $query;
+mcp_brevo_test_assert( $options === mcp_brevo_wonderpush_get_current_init_options(), 'A local placement must not modify the original WonderPush init options.' );
+mcp_brevo_wonderpush_enqueue_preinit_script();
+mcp_brevo_test_assert( $query === ( $GLOBALS['mcp_brevo_test_styles'][ $style ] ?? '' ), 'The asset should use exactly the supplied media query.' );
+
+unset( $GLOBALS['mcp_brevo_test_styles'][ $style ] );
+$GLOBALS['mcp_brevo_test_options'][ MCP_BREVO_WONDERPUSH_LOCALIZATION_OPTION ]['subscription_bell']['inlineMediaQuery'] = '';
+mcp_brevo_wonderpush_enqueue_preinit_script();
+mcp_brevo_test_assert( ! isset( $GLOBALS['mcp_brevo_test_styles'][ $style ] ), 'An empty query should restore floating placement.' );
 
 echo "PASS: WonderPush subscription-bell settings are sanitized and merged through the existing pre-init seam.\n";

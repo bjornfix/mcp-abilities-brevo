@@ -1,0 +1,13 @@
+body > .wonderpush-bell {
+	/* The native widget can set its dock offsets inline. */
+	position: relative !important;
+	inset: auto !important;
+	inline-size: fit-content;
+	margin-left: 0;
+	margin-right: auto;
+}
+
+body > .wonderpush-bell.wonderpush-right {
+	margin-left: auto;
+	margin-right: 0;
+}

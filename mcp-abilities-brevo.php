@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Brevo
  * Plugin URI: https://devenia.com/plugins/mcp-abilities-brevo/
  * Description: Brevo (Sendinblue) abilities for MCP. Manage contacts, lists, WonderPush localization, and send emails via Brevo API.
- * Version: 1.0.13
+ * Version: 1.0.14
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
@@ -760,6 +760,10 @@ function mcp_brevo_wonderpush_sanitize_subscription_bell_settings( array $settin
 		$output['hideWhenSubscribed'] = (bool) $settings['hideWhenSubscribed'];
 	}
 
+	if ( isset( $settings['inlineMediaQuery'] ) && is_string( $settings['inlineMediaQuery'] ) ) {
+		$output['inlineMediaQuery'] = trim( $settings['inlineMediaQuery'] );
+	}
+
 	return $output;
 }
 
@@ -780,6 +784,10 @@ function mcp_brevo_wonderpush_subscription_bell_settings_schema(): array {
 			'hideWhenSubscribed' => array(
 				'type'        => 'boolean',
 				'description' => 'Hide the bell after the visitor has subscribed.',
+			),
+			'inlineMediaQuery'   => array(
+				'type'        => 'string',
+				'description' => 'Use the site-provided CSS media query to place the original bell in the page flow. An empty string restores floating placement at all sizes.',
 			),
 		),
 		'additionalProperties' => false,
@@ -906,7 +914,8 @@ function mcp_brevo_wonderpush_get_current_init_options(): array {
 		}
 	}
 
-	$subscription_bell = mcp_brevo_wonderpush_sanitize_subscription_bell_settings( (array) $config['subscription_bell'] );
+	$subscription_bell = $config['subscription_bell'];
+	unset( $subscription_bell['inlineMediaQuery'] );
 	if ( ! empty( $subscription_bell ) ) {
 		$options['subscriptionBell'] = array_merge( $options['subscriptionBell'] ?? array(), $subscription_bell );
 	}
@@ -919,11 +928,23 @@ function mcp_brevo_wonderpush_get_current_init_options(): array {
 }
 
 /**
- * Enqueue a pre-init WonderPush patch so localized options are merged into the Brevo/WonderPush init call.
+ * Enqueue the configured bell placement and merge localized options into the WonderPush init call.
  */
 function mcp_brevo_wonderpush_enqueue_preinit_script(): void {
 	if ( is_admin() || wp_doing_ajax() || wp_is_json_request() ) {
 		return;
+	}
+
+	$config       = mcp_brevo_wonderpush_get_localization_config();
+	$inline_media = $config['subscription_bell']['inlineMediaQuery'] ?? '';
+	if ( ! empty( $config['enabled'] ) && '' !== $inline_media ) {
+		wp_enqueue_style(
+			'mcp-brevo-wonderpush-inline-bell',
+			plugins_url( 'includes/wonderpush-inline-bell.css', __FILE__ ),
+			array(),
+			'1.0.14',
+			$inline_media
+		);
 	}
 
 	$options = mcp_brevo_wonderpush_get_current_init_options();
@@ -1229,7 +1250,7 @@ function mcp_register_brevo_abilities(): void {
 		'brevo/wonderpush-get-subscription-bell',
 		array(
 			'label'               => 'Get WonderPush Subscription Bell',
-			'description'         => 'Read the managed global WonderPush subscription-bell position and subscribed-user visibility.',
+			'description'         => 'Read the managed WonderPush subscription-bell placement and subscribed-user visibility.',
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -1270,7 +1291,7 @@ function mcp_register_brevo_abilities(): void {
 		'brevo/wonderpush-update-subscription-bell',
 		array(
 			'label'               => 'Update WonderPush Subscription Bell',
-			'description'         => 'Update the managed global WonderPush subscription-bell position or hide it after a visitor subscribes.',
+			'description'         => 'Update the managed WonderPush subscription-bell placement and subscribed-user visibility.',
 			'category'            => 'site',
 			'input_schema'        => mcp_brevo_wonderpush_subscription_bell_settings_schema(),
 			'output_schema'       => array(
@@ -1287,7 +1308,7 @@ function mcp_register_brevo_abilities(): void {
 				if ( empty( $updates ) ) {
 					return array(
 						'success' => false,
-						'message' => 'Provide position or hideWhenSubscribed.',
+						'message' => 'Provide position, hideWhenSubscribed, or inlineMediaQuery.',
 					);
 				}
 

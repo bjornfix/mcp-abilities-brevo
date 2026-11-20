@@ -2,13 +2,13 @@
 
 Manage Brevo contacts, lists, forms, localization, and email operations through authenticated WordPress abilities for MCP.
 
-[![Release 1.0.13](https://img.shields.io/badge/release-1.0.13-blue.svg)](https://downloads.devenia.com/mcp-abilities-brevo.zip)
+[![Release 1.0.14](https://img.shields.io/badge/release-1.0.14-blue.svg)](https://downloads.devenia.com/mcp-abilities-brevo.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 - **Tested up to:** WordPress 7.1
-- **Stable tag:** 1.0.13
+- **Stable tag:** 1.0.14
 - **License:** GPLv2 or later
 - **Tags:** mcp, brevo, sendinblue, email, wonderpush
 
@@ -124,7 +124,7 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 | `brevo/api-request` | Call any Brevo v3 endpoint with the configured API key |
 | `brevo/get-account` | Get Brevo account and plan details |
 | `brevo/wonderpush-get-subscription-bell` | Read the managed global WonderPush subscription-bell settings |
-| `brevo/wonderpush-update-subscription-bell` | Update the bell position or hide it after subscription |
+| `brevo/wonderpush-update-subscription-bell` | Update the bell position, set when it sits in the page flow, or hide it after subscription |
 | `brevo/wonderpush-get-localization` | Read stored WonderPush prompt/widget localization |
 | `brevo/wonderpush-update-localization` | Create or update runtime WonderPush localization for one language |
 | `brevo/wonderpush-audit-localization` | Audit WonderPush localization coverage against known site languages |
@@ -307,8 +307,13 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 }
 ```
 
+To let the original bell scroll with the page, pass the site's CSS media query as `inlineMediaQuery` to the same ability. Use the query text without the `@media` keyword. The option uses the default WonderPush widget classes. Pass an empty string to restore floating placement at all viewport sizes. The bell still uses the site's existing WonderPush menu and settings.
+
 ## Changelog
 
+### 1.0.14
+
+Add opt-in in-flow placement for the original WonderPush bell using the site's media query.
 
 ### 1.0.13
 
