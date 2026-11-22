@@ -3,7 +3,7 @@ Contributors: basicus
 Tags: mcp, brevo, sendinblue, email, wonderpush
 Requires at least: 6.9
 Tested up to: 7.1
-Stable tag: 1.0.15
+Stable tag: 1.0.16
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -28,6 +28,9 @@ For update notifications in WordPress, install [Devenia MCP Updater](https://dow
 4. Activate the plugin
 
 == Changelog ==
+
+= 1.0.16 =
+* Add keyboard access to the managed WonderPush bell and its existing menu. Allow a site to opt into measuring available space before using floating controls.
 
 = 1.0.15 =
 * Refresh the browser's cached bell placement stylesheet when its contents change.

@@ -2,13 +2,13 @@
 
 Manage Brevo contacts, lists, forms, localization, and email operations through authenticated WordPress abilities for MCP.
 
-[![Release 1.0.15](https://img.shields.io/badge/release-1.0.15-blue.svg)](https://downloads.devenia.com/mcp-abilities-brevo.zip)
+[![Release 1.0.16](https://img.shields.io/badge/release-1.0.16-blue.svg)](https://downloads.devenia.com/mcp-abilities-brevo.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 - **Tested up to:** WordPress 7.1
-- **Stable tag:** 1.0.15
+- **Stable tag:** 1.0.16
 - **License:** GPLv2 or later
 - **Tags:** mcp, brevo, sendinblue, email, wonderpush
 
@@ -310,6 +310,11 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 To let the original bell scroll with the page, pass the site's CSS media query as `inlineMediaQuery` to the same ability. Use the query text without the `@media` keyword. The option uses the default WonderPush widget classes. Pass an empty string to restore floating placement at all viewport sizes. The bell still uses the site's existing WonderPush menu and settings.
 
 ## Changelog
+
+### 1.0.16
+
+- Add keyboard access to the original managed WonderPush bell and its menu.
+- Support an optional site marker that measures whether floating controls overlap content, using the saved bell media query as the default placement.
 
 ### 1.0.15
 

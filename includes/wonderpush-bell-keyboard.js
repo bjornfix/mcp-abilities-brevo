@@ -4,6 +4,70 @@
 (() => {
 	const instances = new WeakSet();
 	const collapsed = 'wonderpush-collapsed';
+	const bellSelector = 'body > .wonderpush-bell';
+
+	function watchPlacement() {
+		const marker = document.querySelector('[data-mcp-brevo-content]');
+		const stylesheet = document.getElementById('mcp-brevo-wonderpush-inline-bell-css');
+		if (!marker || !stylesheet || !window.ResizeObserver) return () => {};
+
+		let regions;
+		let peer;
+		try {
+			regions = [...document.querySelectorAll(marker.dataset.mcpBrevoContent)];
+			peer = document.querySelector(marker.dataset.mcpBrevoFloatingControl);
+		} catch {
+			return () => {};
+		}
+		if (!regions.length || !peer) return () => {};
+
+		const flow = 'data-mcp-brevo-controls-flow';
+		const fallback = stylesheet.media;
+		const mobile = window.matchMedia(fallback);
+		const inset = value => Number.parseFloat(value) || 0;
+		const overlaps = (box, regions) => box.width > 0 && regions.some(region => {
+			const bounds = region.getBoundingClientRect();
+			if (!bounds.width) return false;
+			const css = getComputedStyle(region);
+			return box.right > bounds.left + inset(css.borderLeftWidth) + inset(css.paddingLeft)
+				&& box.left < bounds.right - inset(css.borderRightWidth) - inset(css.paddingRight);
+		});
+		const setFlow = inline => {
+			document.body.toggleAttribute(flow, inline);
+			const media = inline ? 'all' : fallback;
+			if (stylesheet.media !== media) stylesheet.media = media;
+		};
+		const measure = () => {
+			if (mobile.matches) {
+				setFlow(true);
+				return;
+			}
+
+			// Read the native floating positions in the same frame, even when the previous result was inline.
+			setFlow(false);
+			const bell = document.querySelector(bellSelector);
+			const icon = bell?.querySelector('.wonderpush-icon-container');
+			const discrete = bell?.classList.contains('wonderpush-discrete');
+			const transition = icon?.style.transitionProperty;
+			if (discrete && icon) {
+				icon.style.transitionProperty = 'none';
+				bell.classList.remove('wonderpush-discrete');
+			}
+			const inline = overlaps(peer.getBoundingClientRect(), regions)
+				|| (bell && overlaps(bell.getBoundingClientRect(), regions));
+			if (discrete && icon) {
+				bell.classList.add('wonderpush-discrete');
+				icon.style.transitionProperty = transition;
+			}
+			setFlow(Boolean(inline));
+		};
+		const observer = new ResizeObserver(measure);
+		observer.observe(document.documentElement);
+		regions.forEach(region => observer.observe(region));
+		mobile.addEventListener('change', measure);
+		measure();
+		return measure;
+	}
 
 	function attach(bell) {
 		if (instances.has(bell)) return;
@@ -70,9 +134,12 @@
 		});
 	}
 
-	const bellSelector = 'body > .wonderpush-bell';
-	const bind = () => document.querySelectorAll(bellSelector).forEach(attach);
 	if (!document.body) return;
+	const measure = watchPlacement();
+	const bind = () => {
+		document.querySelectorAll(bellSelector).forEach(attach);
+		measure();
+	};
 	new MutationObserver(bind).observe(document.body, { childList: true });
 	bind();
 })();
