@@ -939,12 +939,20 @@ function mcp_brevo_wonderpush_enqueue_preinit_script(): void {
 	$inline_media = $config['subscription_bell']['inlineMediaQuery'] ?? '';
 	if ( ! empty( $config['enabled'] ) && '' !== $inline_media ) {
 		$stylesheet = 'includes/wonderpush-inline-bell.css';
+		$keyboard   = 'includes/wonderpush-bell-keyboard.js';
 		wp_enqueue_style(
 			'mcp-brevo-wonderpush-inline-bell',
 			plugins_url( $stylesheet, __FILE__ ),
 			array(),
 			hash_file( 'sha256', __DIR__ . '/' . $stylesheet ),
 			$inline_media
+		);
+		wp_enqueue_script(
+			'mcp-brevo-wonderpush-bell-keyboard',
+			plugins_url( $keyboard, __FILE__ ),
+			array(),
+			hash_file( 'sha256', __DIR__ . '/' . $keyboard ),
+			true
 		);
 	}
 

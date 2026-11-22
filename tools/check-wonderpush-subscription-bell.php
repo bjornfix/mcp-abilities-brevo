@@ -53,7 +53,9 @@ function wp_enqueue_style( string $handle, string $src, array $deps, string $ver
 	$GLOBALS['mcp_brevo_test_styles'][ $handle ] = array( 'media' => $media, 'version' => $ver );
 }
 function wp_register_script(): void {}
-function wp_enqueue_script(): void {}
+function wp_enqueue_script( string $handle, string $src = '', array $deps = array(), string $ver = '', bool $in_footer = false ): void {
+	$GLOBALS['mcp_brevo_test_scripts'][ $handle ] = array( 'source' => $src, 'version' => $ver, 'in_footer' => $in_footer );
+}
 function wp_add_inline_script(): void {}
 function wp_json_encode( mixed $data, int $flags = 0 ): string {
 	return json_encode( $data, $flags | JSON_THROW_ON_ERROR );
@@ -138,8 +140,10 @@ mcp_brevo_test_assert( 'right' === $options['subscriptionBell']['position'], 'Gl
 mcp_brevo_test_assert( ! isset( $options['locale'] ), 'No locale should be invented without a language-specific record.' );
 
 $style = 'mcp-brevo-wonderpush-inline-bell';
+$keyboard = 'mcp-brevo-wonderpush-bell-keyboard';
 mcp_brevo_wonderpush_enqueue_preinit_script();
 mcp_brevo_test_assert( ! isset( $GLOBALS['mcp_brevo_test_styles'][ $style ] ), 'An existing configuration should keep the bell floating.' );
+mcp_brevo_test_assert( ! isset( $GLOBALS['mcp_brevo_test_scripts'][ $keyboard ] ), 'An unmanaged bell should keep its existing frontend scripts.' );
 $query = '(width < 48rem)';
 $GLOBALS['mcp_brevo_test_options'][ MCP_BREVO_WONDERPUSH_LOCALIZATION_OPTION ]['subscription_bell']['inlineMediaQuery'] = $query;
 mcp_brevo_test_assert( $options === mcp_brevo_wonderpush_get_current_init_options(), 'A local placement must not modify the original WonderPush init options.' );
@@ -148,6 +152,12 @@ $registered = $GLOBALS['mcp_brevo_test_styles'][ $style ] ?? array();
 mcp_brevo_test_assert( $query === ( $registered['media'] ?? '' ), 'The asset should use exactly the supplied media query.' );
 $stylesheet_contents = file_get_contents( dirname( __DIR__ ) . '/includes/wonderpush-inline-bell.css' );
 mcp_brevo_test_assert( hash( 'sha256', $stylesheet_contents ) === ( $registered['version'] ?? '' ), 'The cache version should match the stylesheet contents.' );
+$keyboard_script = $GLOBALS['mcp_brevo_test_scripts'][ $keyboard ] ?? array();
+mcp_brevo_test_assert(
+	true === ( $keyboard_script['in_footer'] ?? false )
+	&& hash_file( 'sha256', dirname( __DIR__ ) . '/includes/wonderpush-bell-keyboard.js' ) === ( $keyboard_script['version'] ?? '' ),
+	'The managed bell should enqueue the content-versioned keyboard script in the footer.'
+);
 
 unset( $GLOBALS['mcp_brevo_test_styles'][ $style ] );
 $GLOBALS['mcp_brevo_test_options'][ MCP_BREVO_WONDERPUSH_LOCALIZATION_OPTION ]['subscription_bell']['inlineMediaQuery'] = '';
